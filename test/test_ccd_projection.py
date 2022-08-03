@@ -16,19 +16,19 @@ class TestCCDProjection(unittest.TestCase):
 
         # Set particle data
         p = Particle()
-        p.min_dia = 144e-9
-        p.max_dia = 573e-9
-        p.mean_dia = 281e-9
-        p.std_dia = 97e-9
-        p.density = 810
+        p.min_dia = 144e-6  # mm
+        p.max_dia = 573e-6  # mm
+        p.mean_dia = 281e-6  # mm
+        p.std_dia = 97e-6  # mm
+        p.density = 810  # kg/m3
         p.n_concentration = 5000
         p.compute_distribution()
         # print(p.particle_field)
 
         # Read-in the laser sheet
         laser = LaserSheet(grid)
-        laser.position = 0.05
-        laser.thickness = 5e-2
+        laser.position = 0.05  # in mm
+        laser.thickness = 4  # in mm (Data obtained from LaVision)
         laser.compute_bounds()
         # print(laser.width)
 
@@ -39,10 +39,10 @@ class TestCCDProjection(unittest.TestCase):
         loc.in_plane = 90
         loc.compute_locations()
 
-        # Create particle projections
+        # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)
-        proj.d_ccd = 5e-1  # in meters
-        proj.d_ia = 25e-1  # in meters
+        proj.d_ccd = 1000  # in mm
+        proj.d_ia = 100  # in mm
         proj.compute()
 
         # Sample code to plot particle locations and relative diameters

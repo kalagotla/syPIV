@@ -31,6 +31,7 @@ class Particle:
             print("When Gaussian distribution is used,"
                   " the particle statistics are computed using mean and std diameters")
             self.particle_field = rng.normal(self.mean_dia, self.std_dia, int(self.n_concentration))
+            self.particle_field = np.clip(self.particle_field, self.min_dia, self.max_dia)
             return
 
         # TODO: Add Uniform distribution
