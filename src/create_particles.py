@@ -1,7 +1,7 @@
 # Creates 3d IA from grid and flow data
 # Spawns particles on a distribution and returns their locations
 import numpy as np
-rng = np.random.default_rng()
+rng = np.random.default_rng(7)
 
 
 class Particle:
@@ -24,7 +24,7 @@ class Particle:
     def compute_distribution(self):
         """
         Run this method to return a distribution of particle diameters
-        :return: numpy.array
+        :return: numpy.ndarray
         A 1d array of particle diameters
         """
         if self.distribution == "gaussian":
@@ -98,7 +98,8 @@ class CreateParticles:
         _particles_off_plane = int(self.particle.n_concentration - _particles_in_plane)
         _x_loc = rng.uniform(self.ia_bounds[0], self.ia_bounds[1], _particles_off_plane)
         _y_loc = rng.uniform(self.ia_bounds[2], self.ia_bounds[3], _particles_off_plane)
-        _z_loc = rng.uniform(self.laser_sheet.width[0], self.laser_sheet.width[1], _particles_off_plane)
+        _z_loc = rng.uniform(self.laser_sheet.position - self.laser_sheet.width[0],
+                             self.laser_sheet.position + self.laser_sheet.width[1], _particles_off_plane)
         self.locations = np.concatenate((self.locations,
                                         np.vstack((_x_loc, _y_loc, _z_loc,
                                                    self.particle.particle_field[_particles_in_plane:])).T), axis=0)
