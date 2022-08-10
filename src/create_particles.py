@@ -29,7 +29,8 @@ class Particle:
         """
         if self.distribution == "gaussian":
             print("When Gaussian distribution is used,"
-                  " the particle statistics are computed using mean and std diameters")
+                  " the particle statistics are computed using mean and std diameters\n"
+                  "Particle min and max are cutoffs for the distribution")
             self.particle_field = rng.normal(self.mean_dia, self.std_dia, int(self.n_concentration))
             self.particle_field = np.clip(self.particle_field, self.min_dia, self.max_dia)
             return
@@ -39,6 +40,7 @@ class Particle:
     pass
 
 
+# TODO: Add laser pulse for generating second snap
 class LaserSheet:
     """
     Laser sheet information to pass into CreateParticles

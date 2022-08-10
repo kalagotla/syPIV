@@ -75,8 +75,8 @@ class TestIntensity(unittest.TestCase):
 
         # Creating temp arrays to test. This will be done internally in the code of image_gen
         xp, yp = proj.projections[:, 0], proj.projections[:, 1]
-        x = np.linspace(-proj.xres/2, proj.xres/2, proj.xres)
-        y = np.linspace(-proj.yres/2, proj.yres/2, proj.yres)
+        x = np.linspace(-proj.xres / 2, proj.xres / 2, proj.xres)
+        y = np.linspace(-proj.yres / 2, proj.yres / 2, proj.yres)
         xsize = proj.xres / proj.dpi
         ysize = proj.yres / proj.dpi
 
@@ -94,7 +94,6 @@ class TestIntensity(unittest.TestCase):
         ax = plt.axes([0.0, 0.0, 1.0, 1.0])
         ax.imshow(intensity.values, cmap='gray', origin='lower')
         plt.show()
-
 
 
 if __name__ == '__main__':

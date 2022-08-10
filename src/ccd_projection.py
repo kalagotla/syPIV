@@ -36,7 +36,6 @@ class CCDProjection:
         # Convert to pixels for further processing
         self.projections[:, :2] = self.projections[:, :2] * self.dpi / 25.4e-3
 
-
         return
 
     pass
