@@ -10,6 +10,7 @@ class TestCreateParticles(unittest.TestCase):
         # Read-in the grid and flow file
         grid = GridIO('../data/shocks/shock_test.sb.sp.x')
         grid.read_grid()
+        grid.compute_metrics()
         flow = FlowIO('../data/shocks/shock_test.sb.sp.q')
         flow.read_flow()
 
@@ -20,14 +21,15 @@ class TestCreateParticles(unittest.TestCase):
         p.mean_dia = 281e-9
         p.std_dia = 97e-9
         p.density = 810
-        p.n_concentration = 5000
+        p.n_concentration = 50
         p.compute_distribution()
         # print(p.particle_field)
 
         # Read-in the laser sheet
         laser = LaserSheet(grid)
-        laser.position = 0.05
-        laser.thickness = 0.05
+        laser.position = 0.0009
+        laser.thickness = 0.0001  # Adjusted based on grid thickness
+        laser.pulse_time = 1e-6
         laser.compute_bounds()
         # print(laser.width)
 
@@ -37,6 +39,7 @@ class TestCreateParticles(unittest.TestCase):
         loc.ia_bounds = [0, 0.003, 0, 0.001]
         loc.in_plane = 90
         loc.compute_locations()
+        loc.compute_locations2()
 
         # Sample code to plot particle locations and relative diameters
         _in_plane = int(p.n_concentration * loc.in_plane * 0.01)
@@ -46,6 +49,16 @@ class TestCreateParticles(unittest.TestCase):
         # plot out-of-plane locations
         plt.scatter(loc.locations[_in_plane:, 0], loc.locations[_in_plane:, 1],
                     s=10*loc.locations[_in_plane:, 3]/p.min_dia, c='r')
+
+        # plt.show()
+
+        # plot in-plane particle locations
+        plt.figure()
+        plt.scatter(loc.locations2[:_in_plane, 0], loc.locations2[:_in_plane, 1],
+                    s=10 * loc.locations2[:_in_plane, 3] / p.min_dia, c='g')
+        # plot out-of-plane locations
+        plt.scatter(loc.locations2[_in_plane:, 0], loc.locations2[_in_plane:, 1],
+                    s=10 * loc.locations2[_in_plane:, 3] / p.min_dia, c='r')
 
         plt.show()
 

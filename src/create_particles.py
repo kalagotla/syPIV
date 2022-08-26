@@ -1,6 +1,7 @@
 # Creates 3d IA from grid and flow data
 # Spawns particles on a distribution and returns their locations
 import numpy as np
+from numba import njit
 rng = np.random.default_rng(7)
 
 
@@ -54,13 +55,14 @@ class LaserSheet:
         self.position = None
         self.thickness = None
         self.width = None
+        self.pulse_time = None
 
         print("The laser sheet will reside inside the grid. "
               "Carefully assign position and thickness using parameters below")
         print(f"position and thickness should be between {self.grid.grd_min[:, 2]} and {self.grid.grd_max[:, 2]}")
 
     def compute_bounds(self):
-        self.width = np.array([self.position - self.thickness/2, self.position + self.thickness/2])
+        self.width = np.array([self.position - self.thickness / 2, self.position + self.thickness / 2])
 
     pass
 
@@ -83,6 +85,7 @@ class CreateParticles:
         self.in_plane = None
         # locations is an n x 4 array; [x, y, z, diameter]
         self.locations = None
+        self.locations2 = []
         print(f"ia_bounds should be with in:\n"
               f"In x-direction: {self.grid.grd_min[:, 0]} and {self.grid.grd_max[:, 0]}\n"
               f"In y-direction: {self.grid.grd_min[:, 1]} and {self.grid.grd_max[:, 1]}\n")
@@ -103,8 +106,37 @@ class CreateParticles:
         _z_loc = rng.uniform(self.laser_sheet.position - self.laser_sheet.width[0],
                              self.laser_sheet.position + self.laser_sheet.width[1], _particles_off_plane)
         self.locations = np.concatenate((self.locations,
-                                        np.vstack((_x_loc, _y_loc, _z_loc,
-                                                   self.particle.particle_field[_particles_in_plane:])).T), axis=0)
+                                         np.vstack((_x_loc, _y_loc, _z_loc,
+                                                    self.particle.particle_field[_particles_in_plane:])).T), axis=0)
+
+        return
+
+    def compute_locations2(self):
+        """
+        Will integrate particles to new locations based on
+        Laser pulse time and velocities at their locations
+        :return:
+        """
+        from src.variables import Variables
+        from src.search import Search
+        from src.interpolation import Interpolation
+
+        # Run search on locations
+        for _x, _y, _z, _d in self.locations:
+            _idx = Search(self.grid, [_x, _y, _z])
+            _idx.compute(method='distance')
+
+            _interp = Interpolation(self.flow, _idx)
+            _interp.compute(method='p-space')
+
+            _var = Variables(_interp)
+            _var.compute_velocity()
+
+            _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
+
+            self.locations2.append(np.hstack((_new_loc, _d)))
+
+        self.locations2 = np.array(self.locations2)
 
         return
 
