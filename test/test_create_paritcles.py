@@ -21,7 +21,7 @@ class TestCreateParticles(unittest.TestCase):
         p.mean_dia = 281e-9
         p.std_dia = 97e-9
         p.density = 810
-        p.n_concentration = 50
+        p.n_concentration = 5000
         p.compute_distribution()
         # print(p.particle_field)
 
@@ -29,7 +29,7 @@ class TestCreateParticles(unittest.TestCase):
         laser = LaserSheet(grid)
         laser.position = 0.0009
         laser.thickness = 0.0001  # Adjusted based on grid thickness
-        laser.pulse_time = 1e-6
+        laser.pulse_time = 1e-7
         laser.compute_bounds()
         # print(laser.width)
 
@@ -49,6 +49,8 @@ class TestCreateParticles(unittest.TestCase):
         # plot out-of-plane locations
         plt.scatter(loc.locations[_in_plane:, 0], loc.locations[_in_plane:, 1],
                     s=10*loc.locations[_in_plane:, 3]/p.min_dia, c='r')
+        plt.xlim([-0.0001, 0.004])
+        plt.ylim([0, 0.0019])
 
         # plt.show()
 
@@ -59,6 +61,8 @@ class TestCreateParticles(unittest.TestCase):
         # plot out-of-plane locations
         plt.scatter(loc.locations2[_in_plane:, 0], loc.locations2[_in_plane:, 1],
                     s=10 * loc.locations2[_in_plane:, 3] / p.min_dia, c='r')
+        plt.xlim([-0.0001, 0.004])
+        plt.ylim([0, 0.0019])
 
         plt.show()
 

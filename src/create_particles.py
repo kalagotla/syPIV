@@ -3,6 +3,8 @@
 import numpy as np
 from numba import njit
 rng = np.random.default_rng(7)
+from multiprocessing.dummy import Pool as ThreadPool
+from multiprocessing import cpu_count
 
 
 class Particle:
@@ -121,8 +123,7 @@ class CreateParticles:
         from src.search import Search
         from src.interpolation import Interpolation
 
-        # Run search on locations
-        for _x, _y, _z, _d in self.locations:
+        def _multi_process(_x, _y, _z, _d):
             _idx = Search(self.grid, [_x, _y, _z])
             _idx.compute(method='distance')
 
@@ -132,9 +133,19 @@ class CreateParticles:
             _var = Variables(_interp)
             _var.compute_velocity()
 
+            # TODO: Integrating step to find new particle location. Change with drag model if using velocity data
+            # TODO: If using particle data, use the equation below
             _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
 
             self.locations2.append(np.hstack((_new_loc, _d)))
+
+            return
+
+        n = max(1, cpu_count() - 1)
+        pool = ThreadPool(n)
+        itemp = pool.starmap(_multi_process, self.locations)
+        pool.close()
+        pool.join()
 
         self.locations2 = np.array(self.locations2)
 
