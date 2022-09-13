@@ -9,35 +9,37 @@ class TestCCDProjection(unittest.TestCase):
         from src.ccd_projection import CCDProjection
 
         # Read-in the grid and flow file
-        grid = GridIO('../data/shocks/shock_test.sb.sp.x')
+        grid = GridIO('../data/plate_data/plate.sp.x')
         grid.read_grid()
-        flow = FlowIO('../data/shocks/shock_test.sb.sp.q')
+        flow = FlowIO('../data/plate_data/sol-0000010.q')
         flow.read_flow()
 
         # Set particle data
         p = Particle()
-        p.min_dia = 144e-6  # mm
-        p.max_dia = 573e-6  # mm
-        p.mean_dia = 281e-6  # mm
-        p.std_dia = 97e-6  # mm
+        p.min_dia = 144e-9  # m
+        p.max_dia = 573e-9  # m
+        p.mean_dia = 281e-9  # m
+        p.std_dia = 97e-9  # m
         p.density = 810  # kg/m3
-        p.n_concentration = 5000
+        p.n_concentration = 50
         p.compute_distribution()
         # print(p.particle_field)
 
         # Read-in the laser sheet
         laser = LaserSheet(grid)
-        laser.position = 0.05  # in mm
-        laser.thickness = 4  # in mm (Data obtained from LaVision)
+        laser.position = 0.05  # in m
+        laser.thickness = 4e-3  # in m (Data obtained from LaVision)
+        laser.pulse_time = 1e-5
         laser.compute_bounds()
         # print(laser.width)
 
         # Create particle locations array
         ia_bounds = [None, None, None, None]
         loc = CreateParticles(grid, flow, p, laser, ia_bounds)
-        loc.ia_bounds = [0, 0.003, 0, 0.001]
-        loc.in_plane = 90
+        loc.ia_bounds = [0.3, 0.5, 0.3, 0.5]
+        loc.in_plane = 70
         loc.compute_locations()
+        loc.compute_locations2()
 
         # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)
@@ -51,6 +53,12 @@ class TestCCDProjection(unittest.TestCase):
         plt.scatter(proj.projections[:_in_plane, 0], proj.projections[:_in_plane, 1], c='g', s=5)
         # plot out-of-plane locations
         plt.scatter(proj.projections[_in_plane:, 0], proj.projections[_in_plane:, 1], c='r', s=5)
+
+        plt.figure()
+        # plot in-plane particle locations
+        plt.scatter(proj.projections2[:_in_plane, 0], proj.projections2[:_in_plane, 1], c='g', s=5)
+        # plot out-of-plane locations
+        plt.scatter(proj.projections2[_in_plane:, 0], proj.projections2[_in_plane:, 1], c='r', s=5)
 
         plt.show()
 

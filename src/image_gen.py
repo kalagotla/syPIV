@@ -15,12 +15,12 @@ class ImageGen:
         self.ax = None
         self.snap_num = None
 
-    def first_snap(self):
+    def snap(self, snap_num=0):
         """
         Function to generate first snap from the intensity data
         :return:
         """
-        self.snap_num = 1
+        self.snap_num = snap_num
         xsize = self.intensity.projection.xres / self.intensity.projection.dpi
         ysize = self.intensity.projection.yres / self.intensity.projection.dpi
         self.fig = plt.figure(figsize=[xsize, ysize], dpi=self.intensity.projection.dpi)
@@ -28,14 +28,6 @@ class ImageGen:
         ax.imshow(self.intensity.values, cmap='gray', origin='lower')
         ax.axis('tight')
         plt.show()
-
-        return
-
-    def second_snap(self):
-        """
-        Function to generate second snap from the intensity data
-        :return:
-        """
 
         return
 
@@ -94,7 +86,7 @@ class ImageGen:
         ax.set_title('Contour plot of intensities')
 
         # Show the image
-        self.first_snap()
+        self.snap(snap_num=1)
 
         return
 

@@ -22,13 +22,14 @@ class TestImageGen(unittest.TestCase):
         p.mean_dia = 281e-9  # m
         p.std_dia = 97e-9  # m
         p.density = 810  # kg/m3
-        p.n_concentration = 2500
+        p.n_concentration = 5000
         p.compute_distribution()
 
         # Read-in the laser sheet
         laser = LaserSheet(grid)
         laser.position = 0.05  # in m
         laser.thickness = 4e-3  # in m (Data obtained from LaVision)
+        laser.pulse_time = 1e-7
         laser.compute_bounds()
 
         # Create particle locations array
@@ -37,6 +38,7 @@ class TestImageGen(unittest.TestCase):
         loc.ia_bounds = [0.3, 0.5, 0.3, 0.5]  # in m
         loc.in_plane = 70
         loc.compute_locations()
+        loc.compute_locations2()
 
         # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)
@@ -55,9 +57,21 @@ class TestImageGen(unittest.TestCase):
         intensity.compute()
 
         snap = ImageGen(intensity)
-        # snap.first_snap()
-        # snap.save_snap(fname='../../snap_1.tif')
-        snap.check_data()
+        snap.snap(snap_num=1)
+        snap.save_snap(fname='../../snap_1.tif')
+        # snap.check_data()
+
+        cache2 = (proj.projections2[:, 2], proj.projections2[:, 2],
+                 proj.projections2[:, 0], proj.projections2[:, 1],
+                 2.0, 2.0, 1.0, 1.0)
+        intensity2 = Intensity(cache2, proj)
+        intensity2.setup()
+        intensity2.compute()
+        #
+        snap2 = ImageGen(intensity2)
+        snap.snap(snap_num=2)
+        snap.save_snap(fname='../../snap_2.tif')
+        # snap2.check_data()
 
 
 if __name__ == '__main__':
