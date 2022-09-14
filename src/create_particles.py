@@ -2,9 +2,9 @@
 # Spawns particles on a distribution and returns their locations
 import numpy as np
 from numba import njit
-rng = np.random.default_rng(7)
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import cpu_count
+rng = np.random.default_rng(7)
 
 
 class Particle:

@@ -38,7 +38,7 @@ class ImageGen:
 
         return
 
-    def check_data(self):
+    def check_data(self, snap_num=0):
         """
         Function to generate images during the image gen process
         1. Create Particles in physical space
@@ -86,7 +86,7 @@ class ImageGen:
         ax.set_title('Contour plot of intensities')
 
         # Show the image
-        self.snap(snap_num=1)
+        self.snap(snap_num=snap_num)
 
         return
 

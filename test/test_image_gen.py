@@ -10,9 +10,10 @@ class TestImageGen(unittest.TestCase):
         from src.image_gen import ImageGen
 
         # Read-in the grid and flow file
-        grid = GridIO('../data/plate_data/plate.sp.x')
+        grid = GridIO('../data/shocks/shock_test.sb.sp.x')
         grid.read_grid()
-        flow = FlowIO('../data/plate_data/sol-0000010.q')
+        grid.compute_metrics()
+        flow = FlowIO('../data/shocks/shock_test.sb.sp.q')
         flow.read_flow()
 
         # Set particle data
@@ -27,23 +28,23 @@ class TestImageGen(unittest.TestCase):
 
         # Read-in the laser sheet
         laser = LaserSheet(grid)
-        laser.position = 0.05  # in m
-        laser.thickness = 4e-3  # in m (Data obtained from LaVision)
-        laser.pulse_time = 1e-7
+        laser.position = 0.0009  # in m
+        laser.thickness = 0.0001  # in m (Data obtained from LaVision)
+        laser.pulse_time = 1e-9
         laser.compute_bounds()
 
         # Create particle locations array
         ia_bounds = [None, None, None, None]
         loc = CreateParticles(grid, flow, p, laser, ia_bounds)
-        loc.ia_bounds = [0.3, 0.5, 0.3, 0.5]  # in m
+        loc.ia_bounds = [0, 0.001, 0, 0.001]  # in m
         loc.in_plane = 70
         loc.compute_locations()
         loc.compute_locations2()
 
         # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)
-        proj.d_ccd = 70  # in m
-        proj.d_ia = 1000  # in m
+        proj.d_ccd = 14  # in m
+        proj.d_ia = 1  # in m
         proj.dpi = 960
         proj.xres = 512
         proj.yres = 512
@@ -59,7 +60,7 @@ class TestImageGen(unittest.TestCase):
         snap = ImageGen(intensity)
         snap.snap(snap_num=1)
         snap.save_snap(fname='../../snap_1.tif')
-        # snap.check_data()
+        # snap.check_data(snap_num=1)
 
         cache2 = (proj.projections2[:, 2], proj.projections2[:, 2],
                  proj.projections2[:, 0], proj.projections2[:, 1],
@@ -69,9 +70,9 @@ class TestImageGen(unittest.TestCase):
         intensity2.compute()
         #
         snap2 = ImageGen(intensity2)
-        snap.snap(snap_num=2)
-        snap.save_snap(fname='../../snap_2.tif')
-        # snap2.check_data()
+        snap2.snap(snap_num=2)
+        snap2.save_snap(fname='../../snap_2.tif')
+        # snap2.check_data(snap_num=2)
 
 
 if __name__ == '__main__':

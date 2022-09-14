@@ -70,7 +70,7 @@ class Intensity:
     @staticmethod
     def multi_process(self, function, xp, yp, dia_x, dia_y, chunksize):
         # Using multiprocessing to compute relative intensity field
-        intensity = np.zeros((self.projection.xres, self.projection.yres))
+        intensity = np.zeros((self.projection.yres, self.projection.xres))
         i = 0
         j = chunksize
         while j <= len(xp):
