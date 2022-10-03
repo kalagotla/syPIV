@@ -23,7 +23,7 @@ class TestImageGen(unittest.TestCase):
         p.mean_dia = 281e-9  # m
         p.std_dia = 97e-9  # m
         p.density = 810  # kg/m3
-        p.n_concentration = 5000
+        p.n_concentration = 25000
         p.compute_distribution()
 
         # Read-in the laser sheet
@@ -43,11 +43,12 @@ class TestImageGen(unittest.TestCase):
 
         # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)
-        proj.d_ccd = 14  # in m
-        proj.d_ia = 1  # in m
-        proj.dpi = 960
-        proj.xres = 512
-        proj.yres = 512
+        proj.dpi = 72
+        proj.xres = 1024
+        proj.yres = 1024
+        # Set distance based on similar triangles relationship
+        proj.d_ccd = proj.xres * 25.4e-3 / proj.dpi  # in m
+        proj.d_ia = 0.001  # in m; ia_bounds (max - min)
         proj.compute()
 
         cache = (proj.projections[:, 2], proj.projections[:, 2],

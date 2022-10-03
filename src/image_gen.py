@@ -21,6 +21,7 @@ class ImageGen:
         :return:
         """
         self.snap_num = snap_num
+        # Specified in inches --> python default
         xsize = self.intensity.projection.xres / self.intensity.projection.dpi
         ysize = self.intensity.projection.yres / self.intensity.projection.dpi
         self.fig = plt.figure(figsize=[xsize, ysize], dpi=self.intensity.projection.dpi)
