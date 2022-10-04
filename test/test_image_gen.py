@@ -36,7 +36,7 @@ class TestImageGen(unittest.TestCase):
         # Create particle locations array
         ia_bounds = [None, None, None, None]
         loc = CreateParticles(grid, flow, p, laser, ia_bounds)
-        loc.ia_bounds = [0, 0.001, 0, 0.001]  # in m
+        loc.ia_bounds = [0.0011, 0.0030, 0, 0.0019]  # in m
         loc.in_plane = 70
         loc.compute_locations()
         loc.compute_locations2()
