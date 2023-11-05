@@ -88,6 +88,7 @@ class ImageGen:
 
         # Show the image
         self.snap(snap_num=snap_num)
+        plt.show()
 
         return
 

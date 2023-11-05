@@ -28,20 +28,21 @@ class Search:
 
     Methods
     -------
-    read_grid()
-        returns the output attributes
+    compute()
+        Finds the location of given point in the grid using the given search-method
+        search-methods:
+            distance, block-distance, p-space, c-space
 
-        Example:
-            grid = GridIO('plate.sp.x')  # Assume file is in the path
-            nodes = Search(grid, [0.5, 0.7, -10.7])  # grid object is created from GridIO
-            print(nodes)  # prints the docstring for grid
-            nodes.compute()  # Call method to search for the cell
-            # Instance attributes
-            print(nodes.index)  # closest node in the grid to the given point
-            print(nodes.cell)  # prints the nodes of the cell
+    p2c()
+        Method to convert location of point in physical space to computational space
+        Rarely used
 
-        author: Dilip Kalagotla @ kal ~ dilip.kalagotla@gmail.com
-        date: 10-24/2021
+    c2p()
+        Method to convert from c-space to p-space
+        Used in integration algorithms to get new cell
+
+    author: Dilip Kalagotla @ kal ~ dilip.kalagotla@gmail.com
+    date: 10-24/2021
         """
 
     def __init__(self, grid, ppoint):
@@ -83,12 +84,12 @@ class Search:
         _point_transform = self.ppoint - _node
 
         # Check if point is a node in the domain
-        if np.all(abs(_point_transform) <= 1e-6):
+        if np.all(abs(_point_transform) <= 1e-12):
             self.cell = self._cell_nodes(i, j, k)
-            self.info = 'Given point is a node in the domain with a tol of 1e-6.\n' \
+            self.info = 'Given point is a node in the domain with a tol of 1e-12.\n' \
                         'Interpolation will assign node properties for integration.\n' \
                         'Index of the node will be returned by cell attribute\n'
-            print(self.info)
+            # print(self.info)
             return
 
         # ON BOUNDARY FOR A GENERALIZED HEXA IS SAME AS DEFAULT SEARCH
@@ -136,7 +137,7 @@ class Search:
             self.ppoint = None
             self.cpoint = None
             self.block = None
-            print(self.info)
+            # print(self.info)
             return
         # Assign the block number to the attribute
         self.block = int(np.where(_bool.all(axis=1))[0][0])
@@ -276,7 +277,7 @@ class Search:
         Returns:
             eps: c-space co-ordinates
         """
-
+        global _cpoint
         self.ppoint = _ppoint
 
         if self.block is None:
@@ -285,16 +286,18 @@ class Search:
         # Start Newton-Raphson
         _iter = 0
         # Initial guess
-        _cpoint = np.array([self.grid.ni[self.block], self.grid.nj[self.block], self.grid.nk[self.block]]) / 2 + \
-            np.random.randn(3)
-
-        # TODO: Replace the compute method with a better initial guess to speed up
+        try:
+            _cpoint is not None
+        except:
+            _cpoint = np.array([self.grid.ni[self.block], self.grid.nj[self.block], self.grid.nk[self.block]]) / 2 + \
+                np.random.randn(3)
 
         while True:
             # Check if taking too long
             if _iter >= 1e3:
-                print('Newton-Raphson did not converge. Try again!\n'
+                print('**ERROR** Newton-Raphson did not converge. Try again!\n'
                       'Possible reason might be the point might be too close to the end of a domain')
+                self.ppoint, self.cpoint = None, None
                 return
 
             # Check for out-of-domain case and reset the point to in-domain
@@ -329,7 +332,12 @@ class Search:
             _delta_ppoint = _ppoint - _pred_ppoint
 
             # End newton-raphson if condition is met
-            if sum(abs(_delta_ppoint)) <= 1e-6:
+            # TODO: Condition needs to be adapted based on Jacobian
+            # TODO: Need to improve by normalizing the data
+            _tol = 1e-12 * self.grid.J[self.cell[0, 0], self.cell[0, 1], self.cell[0, 2], self.block]
+            if _tol <= 1e-11:
+                _tol = 1e-12
+            if sum(abs(_delta_ppoint)) <= _tol:
                 _eps0, _eps1, _eps2 = _cpoint.astype(int)
                 self.cell = self._cell_nodes(_eps0, _eps1, _eps2)
                 self.cpoint = _cpoint
@@ -340,10 +348,12 @@ class Search:
             _delta_cpoint = np.matmul(_J_inv, _delta_ppoint)
 
             # Save old point
-            _cpoint_old = _cpoint
+            _cpoint_old = _cpoint.copy()
 
             # Update point
             _cpoint += _delta_cpoint
+            # Update the point to zero if less than zero
+            _cpoint[_cpoint < 0] = 0
             _cpoint = abs(_cpoint)
             _iter += 1
 
