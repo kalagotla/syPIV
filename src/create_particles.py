@@ -105,8 +105,7 @@ class CreateParticles:
         _particles_off_plane = int(self.particle.n_concentration - _particles_in_plane)
         _x_loc = rng.uniform(self.ia_bounds[0], self.ia_bounds[1], _particles_off_plane)
         _y_loc = rng.uniform(self.ia_bounds[2], self.ia_bounds[3], _particles_off_plane)
-        _z_loc = rng.uniform(self.laser_sheet.position - self.laser_sheet.width[0],
-                             self.laser_sheet.position + self.laser_sheet.width[1], _particles_off_plane)
+        _z_loc = rng.uniform(self.laser_sheet.width[0], self.laser_sheet.width[1], _particles_off_plane)
         self.locations = np.concatenate((self.locations,
                                          np.vstack((_x_loc, _y_loc, _z_loc,
                                                     self.particle.particle_field[_particles_in_plane:])).T), axis=0)
@@ -125,7 +124,7 @@ class CreateParticles:
 
         def _multi_process(_x, _y, _z, _d):
             _idx = Search(self.grid, [_x, _y, _z])
-            _idx.compute(method='distance')
+            _idx.compute(method='p-space')
 
             _interp = Interpolation(self.flow, _idx)
             _interp.compute(method='p-space')
