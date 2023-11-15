@@ -83,20 +83,24 @@ class Intensity:
             intensity += np.sum(Itemp, axis=0)
             i = j
             j += chunksize
+            print(f"Done with {i} particles out of {len(xp)}")
 
         n = max(1, cpu_count() - 1)
         pool = ThreadPool(n)
         itemp = pool.starmap(function, zip(xp[i:-1], yp[i:-1], dia_x[i:-1], dia_y[i:-1]))
         pool.close()
         pool.join()
+        print(f"Done with {len(xp)} particles out of {len(xp)}")
 
         intensity += np.sum(itemp, axis=0)
 
         # Average intensity field
         intensity = intensity / len(xp)
+        print('Done computing intensity field')
 
         return intensity
 
     def compute(self, chunksize=512):
+        print('Computing intensity field...')
         (dia_x, dia_y, xp, yp, sx, sy, frx, fry) = self.cache
         self.values = self.multi_process(self, self.intensity, xp, yp, dia_x, dia_y, chunksize)
