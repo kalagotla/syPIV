@@ -35,7 +35,7 @@ class ImageGen:
     def save_snap(self, fname=None):
         if fname is None:
             fname = "snap_" + str(self.snap_num) + ".tif"
-        self.fig.savefig(fname=fname, dpi=self.intensity.projection.dpi)
+        self.fig.savefig(fname=fname)
         # close the figure
         plt.close(self.fig)
 
