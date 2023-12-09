@@ -36,7 +36,7 @@ class Intensity:
 
     def setup(self):
         """
-        cache = (radiusx, radiusy, x, xp, y, yp, sx, sy, frx, fry)
+        cache = (radiusx, radiusy, xp, yp, sx, sy, frx, fry)
         I = intensityField(cache)
 
         Parameters

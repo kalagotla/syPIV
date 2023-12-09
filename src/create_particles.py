@@ -127,7 +127,7 @@ class CreateParticles:
             try:
                 _x, _y, _z, _d = _location
                 _idx = Search(self.grid, [_x, _y, _z])
-                _idx.compute(method='p-space')
+                _idx.compute(method='distance')
 
                 _interp = Interpolation(self.flow, _idx)
                 _interp.compute(method='p-space')
