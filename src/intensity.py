@@ -87,7 +87,7 @@ class Intensity:
 
         n = max(1, cpu_count() - 1)
         pool = ThreadPool(n)
-        itemp = pool.starmap(function, zip(xp[i:-1], yp[i:-1], dia_x[i:-1], dia_y[i:-1]))
+        itemp = pool.starmap(function, zip(xp[i:], yp[i:], dia_x[i:], dia_y[i:]))
         pool.close()
         pool.join()
         print(f"Done with {len(xp)} particles out of {len(xp)}")
@@ -96,6 +96,10 @@ class Intensity:
 
         # Average intensity field
         intensity = intensity / len(xp)
+
+        # Normalize intensity field to rbg values
+        if np.max(intensity) != 0:
+            intensity = intensity / np.max(intensity) * 255
         print('Done computing intensity field')
 
         return intensity
