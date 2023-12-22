@@ -2,8 +2,10 @@
 # Spawns particles on a distribution and returns their locations
 import numpy as np
 from numba import njit
-from multiprocessing.dummy import Pool as ThreadPool
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, Pool
+from src.variables import Variables
+from src.search import Search
+from src.interpolation import Interpolation
 rng = np.random.default_rng(7)
 
 
@@ -89,6 +91,7 @@ class CreateParticles:
         # locations is an n x 4 array; [x, y, z, diameter]
         self.locations = None
         self.locations2 = []
+        self._failed_ids = []
         print(f"ia_bounds should be with in:\n"
               f"In x-direction: {self.grid.grd_min[:, 0]} and {self.grid.grd_max[:, 0]}\n"
               f"In y-direction: {self.grid.grd_min[:, 1]} and {self.grid.grd_max[:, 1]}\n")
@@ -113,60 +116,55 @@ class CreateParticles:
 
         return
 
+    def _multi_process(self, _location, _task_id):
+        try:
+            _x, _y, _z, _d = _location
+            _idx = Search(self.grid, [_x, _y, _z])
+            _idx.compute(method='p-space')
+
+            _interp = Interpolation(self.flow, _idx)
+            _interp.compute(method='p-space')
+
+            _var = Variables(_interp)
+            _var.compute_velocity()
+
+            # TODO: Integrating step to find new particle location. Change with drag model if using velocity data
+            # TODO: If using particle data, use the equation below
+            _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
+            print(f"Done with task {_task_id}/{len(self.locations)}")
+            return np.hstack((_new_loc, _d))
+        except:
+            # delete the particle from self.locations
+            self._failed_ids.append(_task_id)
+            print(f"***Error in task {_task_id}***")
+            return None
+
     def compute_locations2(self):
         """
         Will integrate particles to new locations based on
         Laser pulse time and velocities at their locations
         :return:
         """
-        from src.variables import Variables
-        from src.search import Search
-        from src.interpolation import Interpolation
-
-        def _multi_process(_location, _task_id):
-            try:
-                _x, _y, _z, _d = _location
-                _idx = Search(self.grid, [_x, _y, _z])
-                _idx.compute(method='distance')
-
-                _interp = Interpolation(self.flow, _idx)
-                _interp.compute(method='p-space')
-
-                _var = Variables(_interp)
-                _var.compute_velocity()
-
-                # TODO: Integrating step to find new particle location. Change with drag model if using velocity data
-                # TODO: If using particle data, use the equation below
-                _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
-
-                self.locations2.append(np.hstack((_new_loc, _d)))
-                print(f"Done with task {_task_id}/{len(self.locations)}")
-            except:
-                # delete the particle from self.locations
-                _failed_ids.append(_task_id)
-                print(f"***Error in task {_task_id}***")
-                pass
-
-            return
 
         # setup parameters for multiprocessing
         _tasks = np.arange(len(self.locations))
-        _failed_ids = []
         n = max(1, cpu_count() - 1)
-        pool = ThreadPool(n)
-        itemp = pool.starmap(_multi_process, zip(self.locations, _tasks))
+        pool = Pool(n)
+        self.locations2 = pool.starmap(self._multi_process, zip(self.locations, _tasks))
         pool.close()
         pool.join()
-        # for i in self.locations:
-        #     _multi_process(*i)
+        # for serial operation uncomment below -- testing
+        # for _i, _j in enumerate(self.locations):
+        #     self._multi_process(_j, _i)
 
         # delete failed tasks
-        self.locations = np.delete(self.locations, _failed_ids, axis=0)
+        self.locations = np.delete(self.locations, self._failed_ids, axis=0)
 
         self.locations2 = np.array(self.locations2)
+        self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
         print(f"Total number of particles as per locations: {len(self.locations)}")
         print(f"Total number of particles as per locations2: {len(self.locations2)}")
-        print(f"Failed number of particles: {len(_failed_ids)}")
+        print(f"Failed number of particles: {len(self._failed_ids)}")
 
         return
 
