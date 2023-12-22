@@ -1,4 +1,5 @@
 import unittest
+import numpy as np
 
 
 class TestImageGen(unittest.TestCase):
@@ -18,12 +19,12 @@ class TestImageGen(unittest.TestCase):
 
         # Set particle data
         p = Particle()
-        p.min_dia = 144e-9  # m
+        p.min_dia = 573e-9  # m
         p.max_dia = 573e-9  # m
-        p.mean_dia = 281e-9  # m
-        p.std_dia = 97e-9  # m
+        p.mean_dia = 573e-9  # m
+        p.std_dia = 0  # m
         p.density = 810  # kg/m3
-        p.n_concentration = 25
+        p.n_concentration = 2
         p.compute_distribution()
 
         # Read-in the laser sheet
@@ -45,13 +46,17 @@ class TestImageGen(unittest.TestCase):
             loc.ia_bounds = [0.0016, 0.0025, 0.0002, 0.0004]  # in m
             loc.in_plane = 70
             loc.compute_locations()
+            # To adjust for the test case; set locations manually
+            # Two locations out-of-plane case
+            loc.locations = np.array([[0.0016+0.000225, 0.0003, 0.00025, p.mean_dia],
+                                      [0.0025-0.000225, 0.0003, 0.00016, p.mean_dia]])
             loc.compute_locations2()
 
             # Create particle projections (Simulating data from EUROPIV)
             proj = CCDProjection(loc)
             proj.dpi = 72
-            proj.xres = 1024
-            proj.yres = 1024
+            proj.xres = 16
+            proj.yres = 16
             # Set distance based on similar triangles relationship
             proj.d_ccd = proj.xres * 25.4e-3 / proj.dpi  # in m
             proj.d_ia = 0.0009  # in m; ia_bounds (max - min)
@@ -59,7 +64,8 @@ class TestImageGen(unittest.TestCase):
 
             cache = (proj.projections[:, 2], proj.projections[:, 2],
                      proj.projections[:, 0], proj.projections[:, 1],
-                     2.0, 2.0, 1.0, 1.0)
+                     2.0, 2.0, 1.0, 1.0,
+                     2, 1, loc.locations[:, 2])  # 2 is gaussian profile, 1 is reflectivity factor, z_physical
             intensity = Intensity(cache, proj)
             intensity.setup()
             intensity.compute()
@@ -72,7 +78,8 @@ class TestImageGen(unittest.TestCase):
 
             cache2 = (proj.projections2[:, 2], proj.projections2[:, 2],
                      proj.projections2[:, 0], proj.projections2[:, 1],
-                     2.0, 2.0, 1.0, 1.0)
+                     2.0, 2.0, 1.0, 1.0,
+                     2, 1, loc.locations2[:, 2])
             intensity2 = Intensity(cache2, proj)
             intensity2.setup()
             intensity2.compute()
