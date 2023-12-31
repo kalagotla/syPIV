@@ -19,9 +19,9 @@ class TestImageGen(unittest.TestCase):
 
         # Set particle data
         p = Particle()
-        p.min_dia = 573e-9  # m
-        p.max_dia = 573e-9  # m
-        p.mean_dia = 573e-9  # m
+        p.min_dia = 1940e-9  # m
+        p.max_dia = 1940e-9  # m
+        p.mean_dia = 1940e-9  # m
         p.std_dia = 0  # m
         p.density = 810  # kg/m3
         p.n_concentration = 2
@@ -44,12 +44,14 @@ class TestImageGen(unittest.TestCase):
             loc = CreateParticles(grid, flow, p, laser, ia_bounds)
             # x_min, x_max, y_min, y_max --> ia_bounds
             loc.ia_bounds = [0.0016, 0.0025, 0.0002, 0.0004]  # in m
-            loc.in_plane = 70
+            loc.in_plane = 100
             loc.compute_locations()
             # To adjust for the test case; set locations manually
             # Two locations out-of-plane case
-            loc.locations = np.array([[0.0016+0.000225, 0.0003, 0.00025, p.mean_dia],
-                                      [0.0025-0.000225, 0.0003, 0.00016, p.mean_dia]])
+            # loc.locations = np.array([[0.0016+0.000225, 0.0003, 0.00025, 1940e-9],
+            #                           [0.0025-0.000225, 0.0003, 0.00025, 1840e-9]])
+            # one location center of the plane
+            loc.locations = np.array([[0.0025-0.000225*2, 0.0003, 0.00025, p.mean_dia]])
             loc.compute_locations2()
 
             # Create particle projections (Simulating data from EUROPIV)
@@ -62,6 +64,7 @@ class TestImageGen(unittest.TestCase):
             proj.d_ia = 0.0009  # in m; ia_bounds (max - min)
             proj.compute()
 
+            # (radiusx, radiusy, xp, yp, sx, sy, frx, fry, s, q, z_physical)
             cache = (proj.projections[:, 2], proj.projections[:, 2],
                      proj.projections[:, 0], proj.projections[:, 1],
                      2.0, 2.0, 1.0, 1.0,

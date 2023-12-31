@@ -28,6 +28,8 @@ class ImageGen:
         ax = plt.axes([0.0, 0.0, 1.0, 1.0])
         ax.imshow(self.intensity.values, cmap='gray', origin='lower')
         ax.axis('tight')
+        # remove black border
+        ax.axis('off')
         # plt.show()
 
         return
