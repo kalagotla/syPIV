@@ -70,7 +70,6 @@ class TestIntensity(unittest.TestCase):
                  proj.projections[:, 0], proj.projections[:, 1],
                  2.0, 2.0, 1.0, 1.0)
         intensity = Intensity(cache, proj)
-        intensity.setup()
         intensity.compute()
 
         # Creating temp arrays to test. This will be done internally in the code of image_gen

@@ -70,7 +70,6 @@ class TestImageGen(unittest.TestCase):
                      2.0, 2.0, 1.0, 1.0,
                      2, 1, loc.locations[:, 2])  # 2 is gaussian profile, 1 is reflectivity factor, z_physical
             intensity = Intensity(cache, proj)
-            intensity.setup()
             intensity.compute()
 
             snap = ImageGen(intensity)
@@ -84,7 +83,6 @@ class TestImageGen(unittest.TestCase):
                      2.0, 2.0, 1.0, 1.0,
                      2, 1, loc.locations2[:, 2])
             intensity2 = Intensity(cache2, proj)
-            intensity2.setup()
             intensity2.compute()
             #
             snap2 = ImageGen(intensity2)
