@@ -76,28 +76,46 @@ class Intensity:
 
         return self.intensity
 
-    def compute(self):
+    def compute(self, chunksize=5096):
         # Using multiprocessing to compute relative intensity field
         (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
         intensity = np.zeros((self.projection.yres, self.projection.xres))
 
-        n = max(1, cpu_count() - 1)
-        pool = Pool(n)
-        n_particles = len(dia_x)
-        chunksize = int(n_particles / n)
-        itemp = pool.starmap(self.setup, zip(dia_x, dia_y, xp, yp,
+        i = 0
+        j = chunksize
+        while j <= len(xp):
+            n = max(1, cpu_count() - 1)
+            pool = Pool(n)
+            n_particles = len(dia_x[i:j])
+            itemp = pool.starmap(self.setup, zip(dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
                                              np.repeat(sx, n_particles), np.repeat(sy, n_particles),
                                              np.repeat(frx, n_particles), np.repeat(fry, n_particles),
                                              np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical,
-                                             np.arange(n_particles)),
-                             chunksize=chunksize)
+                                             np.arange(n_particles)), chunksize=n_particles//n)
+            pool.close()
+            pool.join()
+
+            intensity += np.sum(itemp, axis=0)
+            i = j
+            j += chunksize
+            print(f"Done with {i} particles out of {len(xp)}")
+
+        n = max(1, cpu_count() - 1)
+        pool = Pool(n)
+        n_particles = len(dia_x[i:])
+        itemp = pool.starmap(self.setup, zip(dia_x[i:], dia_y[i:], xp[i:], yp[i:],
+                                             np.repeat(sx, n_particles), np.repeat(sy, n_particles),
+                                             np.repeat(frx, n_particles), np.repeat(fry, n_particles),
+                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical,
+                                             np.arange(n_particles)))
         pool.close()
         pool.join()
+        print(f"Done with {len(xp)} particles out of {len(xp)}")
 
         intensity += np.sum(itemp, axis=0)
 
         # Average intensity field
-        intensity = intensity / n_particles
+        intensity = intensity / len(xp)
 
         # Normalize intensity field to rbg values
         if np.max(intensity) != 0:
