@@ -153,9 +153,28 @@ class CreateParticles:
         self.locations2 = pool.starmap(self._multi_process, zip(self.locations, _tasks))
         pool.close()
         pool.join()
+
+        # delete failed tasks
+        self.locations = np.delete(self.locations, self._failed_ids, axis=0)
+
+        self.locations2 = np.array(self.locations2)
+        self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+        print(f"Total number of particles as per locations: {len(self.locations)}")
+        print(f"Total number of particles as per locations2: {len(self.locations2)}")
+        print(f"Failed number of particles: {len(self._failed_ids)}")
+
+        return
+
+    def compute_locations2_serial(self):
+        """
+        Will integrate particles to new locations based on
+        Laser pulse time and velocities at their locations
+        :return:
+        """
+
         # for serial operation uncomment below -- testing
-        # for _i, _j in enumerate(self.locations):
-        #     self._multi_process(_j, _i)
+        for _i, _j in enumerate(self.locations):
+            self.locations2.append(self._multi_process(_j, _i))
 
         # delete failed tasks
         self.locations = np.delete(self.locations, self._failed_ids, axis=0)

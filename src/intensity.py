@@ -90,7 +90,7 @@ class Intensity:
             itemp = pool.starmap(self.setup, zip(dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
                                              np.repeat(sx, n_particles), np.repeat(sy, n_particles),
                                              np.repeat(frx, n_particles), np.repeat(fry, n_particles),
-                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical,
+                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical[i:j],
                                              np.arange(n_particles)), chunksize=n_particles//n)
             pool.close()
             pool.join()
@@ -106,7 +106,7 @@ class Intensity:
         itemp = pool.starmap(self.setup, zip(dia_x[i:], dia_y[i:], xp[i:], yp[i:],
                                              np.repeat(sx, n_particles), np.repeat(sy, n_particles),
                                              np.repeat(frx, n_particles), np.repeat(fry, n_particles),
-                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical,
+                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical[i:],
                                              np.arange(n_particles)))
         pool.close()
         pool.join()
@@ -126,3 +126,21 @@ class Intensity:
 
         return self.values
 
+    def compute_serial(self):
+        (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
+        intensity = np.zeros((self.projection.yres, self.projection.xres))
+
+        for i in range(len(xp)):
+            intensity += self.setup(dia_x[i], dia_y[i], xp[i], yp[i], sx, sy, frx, fry, s, q, z_physical[i], i)
+
+        # Average intensity field
+        intensity = intensity / len(xp)
+
+        # Normalize intensity field to rbg values
+        if np.max(intensity) != 0:
+            intensity = intensity / np.max(intensity) * 255
+        print('Done computing intensity field')
+
+        self.values = intensity
+
+        return self.values
