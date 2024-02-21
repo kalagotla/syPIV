@@ -6,7 +6,7 @@ from multiprocessing import cpu_count, Pool
 from src.variables import Variables
 from src.search import Search
 from src.interpolation import Interpolation
-rng = np.random.default_rng(7)
+rng = np.random.default_rng()
 
 
 class Particle:
