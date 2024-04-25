@@ -6,6 +6,9 @@ from multiprocessing import cpu_count
 import time
 import os
 import dask.array as da
+import tqdm
+
+
 # import sys
 # resource.setrlimit(resource.RLIMIT_STACK, (2**29, -1))
 # sys.setrecursionlimit(10**6)
@@ -40,7 +43,7 @@ class Intensity:
         self.intensity = None
         self.values = None
 
-    def setup(self, dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical, _task):
+    def setup(self, x, y, ls_thickness, ls_position, dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical, _task):
         """
         cache = (radiusx, radiusy, xp, yp, sx, sy, frx, fry)
         I = intensityField(cache)
@@ -58,33 +61,25 @@ class Intensity:
 
         """
         # start time
-        start = time.perf_counter()
-        # create meshgrid for x and y
-        x = np.linspace(-self.projection.xres/2, self.projection.xres/2, self.projection.xres)
-        y = np.linspace(-self.projection.yres/2, self.projection.yres/2, self.projection.yres)
-        x, y = np.meshgrid(x, y)
-
-        # laser sheet thickness
-        ls_thickness = self.projection.particles.laser_sheet.thickness
-        ls_position = self.projection.particles.laser_sheet.position
+        # start = time.perf_counter()
 
         # compute intensity for each particle location based on Gaussian distribution
         # q is the efficiency factor with which particles scatter light
         # s is the shape factor; 2 --> Gaussian, 10^4 --> uniform
 
         self.intensity = (q *
-                          np.exp(-1/np.sqrt(2*np.pi) *
-                                 abs(2*(z_physical-ls_position)**2/ls_thickness**2)**s) *
+                          np.exp(-1 / np.sqrt(2 * np.pi) *
+                                 abs(2 * (z_physical - ls_position) ** 2 / ls_thickness ** 2) ** s) *
                           (np.pi / 8 * dia_x * dia_y * sx * sy *
-                              (erf((x - xp + 0.5 * frx) / (sx * 2 ** 0.5)) -
-                               erf((x - xp - 0.5 * frx) / (sx * 2 ** 0.5))) *
-                              (erf((y - yp + 0.5 * fry) / (sy * 2 ** 0.5)) -
-                               erf((y - yp - 0.5 * fry) / (sy * 2 ** 0.5)))))
+                           (erf((x - xp + 0.5 * frx) / (sx * 2 ** 0.5)) -
+                            erf((x - xp - 0.5 * frx) / (sx * 2 ** 0.5))) *
+                           (erf((y - yp + 0.5 * fry) / (sy * 2 ** 0.5)) -
+                            erf((y - yp - 0.5 * fry) / (sy * 2 ** 0.5)))))
         # end time
-        end = time.perf_counter()
+        # end = time.perf_counter()
 
-        print(f'Done computing intensity field for {_task}/{len(self.cache[0])} particles in {end - start} seconds.'
-              f'process number is {os.getpid()}')
+        # print(f'Done computing intensity field for {_task}/{len(self.cache[0])} particles in {end - start} seconds.'
+        #       f'process number is {os.getpid()}')
 
         return self.intensity
 
@@ -92,6 +87,14 @@ class Intensity:
         # Using multiprocessing to compute relative intensity field
         (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
         intensity = np.zeros((self.projection.yres, self.projection.xres))
+        # create meshgrid for x and y
+        x = np.linspace(-self.projection.xres / 2, self.projection.xres / 2, self.projection.xres)
+        y = np.linspace(-self.projection.yres / 2, self.projection.yres / 2, self.projection.yres)
+        x, y = np.meshgrid(x, y)
+
+        # laser sheet thickness
+        ls_thickness = self.projection.particles.laser_sheet.thickness
+        ls_position = self.projection.particles.laser_sheet.position
 
         i = 0
         j = chunksize
@@ -99,11 +102,12 @@ class Intensity:
             n = max(1, cpu_count() - 1)
             pool = Pool(n)
             n_particles = len(dia_x[i:j])
-            itemp = pool.starmap(self.setup, zip(dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
-                                             np.repeat(sx, n_particles), np.repeat(sy, n_particles),
-                                             np.repeat(frx, n_particles), np.repeat(fry, n_particles),
-                                             np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical[i:j],
-                                             np.arange(n_particles)), chunksize=n_particles//n)
+            itemp = pool.starmap(self.setup, zip(x, y, ls_thickness, ls_position,
+                                                 dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
+                                                 np.repeat(sx, n_particles), np.repeat(sy, n_particles),
+                                                 np.repeat(frx, n_particles), np.repeat(fry, n_particles),
+                                                 np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical[i:j],
+                                                 np.arange(n_particles)), chunksize=n_particles // n)
             pool.close()
             pool.join()
 
@@ -141,9 +145,17 @@ class Intensity:
     def compute_serial(self):
         (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
         intensity = np.zeros((self.projection.yres, self.projection.xres))
+        x = np.linspace(-self.projection.xres / 2, self.projection.xres / 2, self.projection.xres)
+        y = np.linspace(-self.projection.yres / 2, self.projection.yres / 2, self.projection.yres)
+        x, y = np.meshgrid(x, y)
 
-        for i in range(len(xp)):
-            intensity += self.setup(dia_x[i], dia_y[i], xp[i], yp[i], sx, sy, frx, fry, s, q, z_physical[i], i)
+        # laser sheet thickness
+        ls_thickness = self.projection.particles.laser_sheet.thickness
+        ls_position = self.projection.particles.laser_sheet.position
+
+        for i in tqdm.tqdm(range(len(xp)), desc="Computing intensity field for particles"):
+            intensity += self.setup(x, y, ls_thickness, ls_position,
+                                    dia_x[i], dia_y[i], xp[i], yp[i], sx, sy, frx, fry, s, q, z_physical[i], i)
 
         # Average intensity field
         intensity = intensity / len(xp)
@@ -158,7 +170,12 @@ class Intensity:
         return self.values
 
     def compute_dask(self):
+        """
+        Ideal for computing intensity field for higher resolution images
+        :return:
+        """
         (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
+
         # convert arrays to dask arrays
         dia_x = da.from_array(dia_x, chunks=1000)
         dia_y = da.from_array(dia_y, chunks=1000)
@@ -183,24 +200,25 @@ class Intensity:
         # s is the shape factor; 2 --> Gaussian, 10^4 --> uniform
 
         # 200 particles at a time to avoid recursion limit
-        for j in range(0, len(xp), 200):
-            start = time.perf_counter()
-            for i in range(j, j + 200 if j + 200 < len(xp) else len(xp)):
+        for j in tqdm.tqdm(range(0, len(xp), 200), desc=f"Computing intensity field for particles in chunks of 200",
+                           position=0, leave=True, colour='green'):
+            for i in tqdm.tqdm(range(j, j + 200 if j + 200 < len(xp) else len(xp)),
+                               desc=f"Setting up intensity field for particles {j} to"
+                                    f" {j + 200 if j + 200 < len(xp) else len(xp)}",
+                               position=1, leave=False, colour='blue'):
                 da_intensity = (da_intensity +
                                 (q *
                                  da.exp(-1 / da.sqrt(2 * np.pi) *
                                         abs(2 * (z_physical[i] - ls_position) ** 2 / ls_thickness ** 2) ** s) *
                                  (np.pi / 8 * dia_x[i] * dia_y[i] * sx * sy *
-                                 (erf((x - xp[i] + 0.5 * frx) / (sx * 2 ** 0.5)) -
-                                  erf((x - xp[i] - 0.5 * frx) / (sx * 2 ** 0.5))) *
-                                   (erf((y - yp[i] + 0.5 * fry) / (sy * 2 ** 0.5)) -
-                                    erf((y - yp[i] - 0.5 * fry) / (sy * 2 ** 0.5)))))
-                                 )
+                                  (erf((x - xp[i] + 0.5 * frx) / (sx * 2 ** 0.5)) -
+                                   erf((x - xp[i] - 0.5 * frx) / (sx * 2 ** 0.5))) *
+                                  (erf((y - yp[i] + 0.5 * fry) / (sy * 2 ** 0.5)) -
+                                   erf((y - yp[i] - 0.5 * fry) / (sy * 2 ** 0.5)))))
+                                )
             da_intensity = da_intensity.compute()
             intensity = intensity + da_intensity
             da_intensity = da.zeros((self.projection.yres, self.projection.xres), chunks=(1000, 1000))
-            end = time.perf_counter()
-            print(f"Done with {i} particles out of {len(xp)}. Time taken: {end - start} seconds.")
 
         # Average intensity field
         intensity = intensity / len(xp)

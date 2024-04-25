@@ -6,6 +6,7 @@ from multiprocessing import cpu_count, Pool
 from src.variables import Variables
 from src.search import Search
 from src.interpolation import Interpolation
+import tqdm
 rng = np.random.default_rng()
 
 
@@ -131,7 +132,7 @@ class CreateParticles:
             # TODO: Integrating step to find new particle location. Change with drag model if using velocity data
             # TODO: If using particle data, use the equation below
             _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
-            print(f"Done with task {_task_id}/{len(self.locations)}")
+            # print(f"Done with task {_task_id}/{len(self.locations)}")
             return np.hstack((_new_loc, _d))
         except:
             # delete the particle from self.locations
@@ -172,8 +173,8 @@ class CreateParticles:
         :return:
         """
 
-        # for serial operation uncomment below -- testing
-        for _i, _j in enumerate(self.locations):
+        # for loop for serial computation. Track using tqdm computing locations...
+        for _i, _j in enumerate(tqdm.tqdm(self.locations, desc="Computing locations for second image")):
             self.locations2.append(self._multi_process(_j, _i))
 
         # delete failed tasks
