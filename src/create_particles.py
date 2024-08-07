@@ -6,6 +6,7 @@ from multiprocessing import cpu_count, Pool
 from src.variables import Variables
 from src.search import Search
 from src.interpolation import Interpolation
+from src.integration import Integration
 import tqdm
 rng = np.random.default_rng()
 
@@ -117,7 +118,7 @@ class CreateParticles:
 
         return
 
-    def _multi_process(self, _location, _task_id):
+    def _process(self, _location, _task_id):
         try:
             _x, _y, _z, _d = _location
             _idx = Search(self.grid, [_x, _y, _z])
@@ -126,13 +127,11 @@ class CreateParticles:
             _interp = Interpolation(self.flow, _idx)
             _interp.compute(method='p-space')
 
-            _var = Variables(_interp)
-            _var.compute_velocity()
-
-            # TODO: Integrating step to find new particle location. Change with drag model if using velocity data
-            # TODO: If using particle data, use the equation below
-            _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
-            # print(f"Done with task {_task_id}/{len(self.locations)}")
+            _intg = Integration(_interp)
+            _new_loc, _ = _intg.compute(method='pRK4', time_step=self.laser_sheet.pulse_time)
+            if _new_loc is None:
+                # make sure the point moves out of the grid for second image
+                _new_loc = np.array((_x, _y, _z)) + self.laser_sheet.pulse_time * _var.velocity.reshape(3)
             return np.hstack((_new_loc, _d))
         except:
             # delete the particle from self.locations
@@ -151,7 +150,7 @@ class CreateParticles:
         _tasks = np.arange(len(self.locations))
         n = max(1, cpu_count() - 1)
         pool = Pool(n)
-        self.locations2 = pool.starmap(self._multi_process, zip(self.locations, _tasks))
+        self.locations2 = pool.starmap(self._process, zip(self.locations, _tasks))
         pool.close()
         pool.join()
 
@@ -175,7 +174,7 @@ class CreateParticles:
 
         # for loop for serial computation. Track using tqdm computing locations...
         for _i, _j in enumerate(tqdm.tqdm(self.locations, desc="Computing locations for second image")):
-            self.locations2.append(self._multi_process(_j, _i))
+            self.locations2.append(self._process(_j, _i))
 
         # delete failed tasks
         self.locations = np.delete(self.locations, self._failed_ids, axis=0)
