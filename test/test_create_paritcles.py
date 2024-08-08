@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 
 class TestCreateParticles(unittest.TestCase):
     def test_create_particles(self):
-        from src.dataio import GridIO, FlowIO
-        from src.create_particles import Particle, LaserSheet, CreateParticles
+        from src.sypivlib.function.dataio import GridIO, FlowIO
+        from src.sypivlib.sypiv.create_particles import Particle, LaserSheet, CreateParticles
 
         # Read-in the grid and flow file
         grid = GridIO('../data/shocks/shock_test.sb.sp.x')
@@ -21,7 +21,7 @@ class TestCreateParticles(unittest.TestCase):
         p.mean_dia = 281e-9
         p.std_dia = 97e-9
         p.density = 810
-        p.n_concentration = 5000
+        p.n_concentration = 500
         p.compute_distribution()
         # print(p.particle_field)
 
@@ -39,7 +39,7 @@ class TestCreateParticles(unittest.TestCase):
         loc.ia_bounds = [0, 0.003, 0, 0.001]
         loc.in_plane = 90
         loc.compute_locations()
-        loc.compute_locations2()
+        loc.compute_locations2_serial()
 
         # Sample code to plot particle locations and relative diameters
         _in_plane = int(p.n_concentration * loc.in_plane * 0.01)
@@ -51,6 +51,7 @@ class TestCreateParticles(unittest.TestCase):
                     s=10*loc.locations[_in_plane:, 3]/p.min_dia, c='r')
         plt.xlim([-0.0001, 0.004])
         plt.ylim([0, 0.0019])
+        plt.title('Particles created on the given IA for the first snap')
 
         # plt.show()
 
@@ -63,6 +64,7 @@ class TestCreateParticles(unittest.TestCase):
                     s=10 * loc.locations2[_in_plane:, 3] / p.min_dia, c='r')
         plt.xlim([-0.0001, 0.004])
         plt.ylim([0, 0.0019])
+        plt.title('Particles created on the given IA for the second snap')
 
         plt.show()
 

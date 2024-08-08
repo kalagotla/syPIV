@@ -4,13 +4,14 @@ import matplotlib.pyplot as plt
 
 class TestCCDProjection(unittest.TestCase):
     def test_ccd_projection(self):
-        from src.dataio import GridIO, FlowIO
-        from src.create_particles import Particle, LaserSheet, CreateParticles
-        from src.ccd_projection import CCDProjection
+        from src.sypivlib.function.dataio import GridIO, FlowIO
+        from src.sypivlib.sypiv.create_particles import Particle, LaserSheet, CreateParticles
+        from src.sypivlib.sypiv.ccd_projection import CCDProjection
 
         # Read-in the grid and flow file
         grid = GridIO('../data/plate_data/plate.sp.x')
         grid.read_grid()
+        grid.compute_metrics()
         flow = FlowIO('../data/plate_data/sol-0000010.q')
         flow.read_flow()
 
@@ -39,7 +40,7 @@ class TestCCDProjection(unittest.TestCase):
         loc.ia_bounds = [0.3, 0.5, 0.3, 0.5]
         loc.in_plane = 70
         loc.compute_locations()
-        loc.compute_locations2()
+        loc.compute_locations2_serial()
 
         # Create particle projections (Simulating data from EUROPIV)
         proj = CCDProjection(loc)

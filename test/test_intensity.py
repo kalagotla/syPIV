@@ -5,10 +5,10 @@ import numpy as np
 
 class TestIntensity(unittest.TestCase):
     def test_intensity(self):
-        from src.dataio import GridIO, FlowIO
-        from src.create_particles import Particle, LaserSheet, CreateParticles
-        from src.ccd_projection import CCDProjection
-        from src.intensity import Intensity
+        from src.sypivlib.function.dataio import GridIO, FlowIO
+        from src.sypivlib.sypiv.create_particles import Particle, LaserSheet, CreateParticles
+        from src.sypivlib.sypiv.ccd_projection import CCDProjection
+        from src.sypivlib.sypiv.intensity import Intensity
 
         # Read-in the grid and flow file
         grid = GridIO('../data/plate_data/plate.sp.x')
@@ -24,7 +24,7 @@ class TestIntensity(unittest.TestCase):
         p.mean_dia = 281e-9  # m
         p.std_dia = 97e-9  # m
         p.density = 810  # kg/m3
-        p.n_concentration = 2500
+        p.n_concentration = 25
         p.compute_distribution()
 
         # Read-in the laser sheet

@@ -4,11 +4,11 @@ import numpy as np
 
 class TestImageGen(unittest.TestCase):
     def test_image_gen(self):
-        from src.dataio import GridIO, FlowIO
-        from src.create_particles import Particle, LaserSheet, CreateParticles
-        from src.ccd_projection import CCDProjection
-        from src.intensity import Intensity
-        from src.image_gen import ImageGen
+        from src.sypivlib.function.dataio import GridIO, FlowIO
+        from src.sypivlib.sypiv.create_particles import Particle, LaserSheet, CreateParticles
+        from src.sypivlib.sypiv.ccd_projection import CCDProjection
+        from src.sypivlib.sypiv.intensity import Intensity
+        from src.sypivlib.sypiv.image_gen import ImageGen
 
         # Read-in the grid and flow file
         grid = GridIO('../data/shocks/interpolated_data/mgrd_to_p3d.x')

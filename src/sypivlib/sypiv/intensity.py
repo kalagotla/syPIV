@@ -3,8 +3,6 @@ from scipy.special import erf
 import numpy as np
 from multiprocessing import Pool
 from multiprocessing import cpu_count
-import time
-import os
 import dask.array as da
 import tqdm
 
@@ -106,7 +104,8 @@ class Intensity:
             n_particles = len(dia_x[i:j])
             # x, y, ls_thickness, ls_position,
             # dia_x[i], dia_y[i], xp[i], yp[i], sx, sy, frx, fry, s, q, z_physical[i], i
-            itemp = pool.starmap(self.setup, zip(x, y, np.repeat(ls_thickness, n_particles),
+            itemp = pool.starmap(self.setup, zip([x]*n_particles, [y]*n_particles,
+                                                 np.repeat(ls_thickness, n_particles),
                                                  np.repeat(ls_position, n_particles),
                                                  dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
                                                  np.repeat(sx, n_particles), np.repeat(sy, n_particles),
@@ -126,7 +125,8 @@ class Intensity:
         n = max(1, cpu_count() - 1)
         pool = Pool(n)
         n_particles = len(dia_x[i:])
-        itemp = pool.starmap(self.setup, zip(x, y, np.repeat(ls_thickness, n_particles),
+        itemp = pool.starmap(self.setup, zip([x]*n_particles, [y]*n_particles,
+                                             np.repeat(ls_thickness, n_particles),
                                              np.repeat(ls_position, n_particles),
                                              dia_x[i:], dia_y[i:], xp[i:], yp[i:],
                                              np.repeat(sx, n_particles), np.repeat(sy, n_particles),
