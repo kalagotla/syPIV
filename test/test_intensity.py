@@ -13,6 +13,7 @@ class TestIntensity(unittest.TestCase):
         # Read-in the grid and flow file
         grid = GridIO('../data/plate_data/plate.sp.x')
         grid.read_grid()
+        grid.compute_metrics()
         flow = FlowIO('../data/plate_data/sol-0000010.q')
         flow.read_flow()
 
@@ -30,6 +31,7 @@ class TestIntensity(unittest.TestCase):
         laser = LaserSheet(grid)
         laser.position = 0.05  # in m
         laser.thickness = 4e-3  # in m (Data obtained from LaVision)
+        laser.pulse_time = 4e-6
         laser.compute_bounds()
 
         # Create particle locations array
@@ -38,6 +40,7 @@ class TestIntensity(unittest.TestCase):
         loc.ia_bounds = [0.3, 0.5, 0.3, 0.5]  # in m
         loc.in_plane = 70
         loc.compute_locations()
+        loc.compute_locations2_serial()
 
         # Sample code to plot particle locations and relative diameters
         _in_plane = int(p.n_concentration * loc.in_plane * 0.01)
@@ -65,10 +68,10 @@ class TestIntensity(unittest.TestCase):
         plt.scatter(proj.projections[_in_plane:, 0], proj.projections[_in_plane:, 1], c='r',
                     s=10 * proj.projections[_in_plane:, 2] / p.min_dia)
         plt.title('Projected data - Not scaled')
-
         cache = (proj.projections[:, 2], proj.projections[:, 2],
                  proj.projections[:, 0], proj.projections[:, 1],
-                 2.0, 2.0, 1.0, 1.0)
+                 0.5, 0.5, 1.0, 1.0,
+                 2, 1, loc.locations[:, 2])
         intensity = Intensity(cache, proj)
         intensity.compute()
 

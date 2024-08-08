@@ -1,6 +1,7 @@
 # Use tri-linear interpolation to get data at the given point
 
 import numpy as np
+from .variables import Variables
 
 
 class Interpolation:
@@ -12,9 +13,9 @@ class Interpolation:
     Attributes
     ----------
     Input:
-        flow : src.io.plot3dio.FlowIO
+        flow : .io.plot3dio.FlowIO
             Flow object created from FlowIO
-        idx: src.streamlines.Search
+        idx: .streamlines.Search
             Index object created from Search
     Output:
         q : ndarray
@@ -61,6 +62,9 @@ class Interpolation:
         self.adaptive = None
         self.rbf_epsilon = 1  # Default for RBF interpolation
         self.method = None
+        # for unsteady case
+        self.flow_old = None
+        self.time = []
 
     def __str__(self):
         doc = "This instance uses " + self.flow.filename + " as the flow file " \
@@ -73,7 +77,6 @@ class Interpolation:
         i0, j0, k0 = self.idx.cell[0, 0], self.idx.cell[0, 1], self.idx.cell[0, 2]
         i1, j1, k1 = self.idx.cell[1, 0], self.idx.cell[1, 1], self.idx.cell[1, 2]
         # compute velocity, mach
-        from src.function.variables import Variables
         _var = Variables(self.flow)
         _var.compute_mach()
         # _grad_v = _J_inv * (v1 - v0)
@@ -130,6 +133,23 @@ class Interpolation:
         _cell_q = self.flow.q[self.idx.cell[:, 0], self.idx.cell[:, 1], self.idx.cell[:, 2], :, self.idx.block]
 
         match method:
+            # simple oblique shock -- use nearest neighbor
+            case 'simple_oblique_shock':
+                if self.idx.cell.shape == (8, 3) and self.idx.info is None:
+                    _distance = np.sqrt(np.sum((_cell_grd - self.idx.ppoint) ** 2, axis=1))
+                    # nearest neighbor index
+                    _nn = np.argmin(_distance)
+                    # assign the nearest neighbor to the given point
+                    self.q = _cell_q[_nn]
+                    self.q = self.q.reshape((1, 1, 1, -1, 1))
+
+                # if the point is node return node data
+                if self.idx.info == 'Given point is a node in the domain with a tol of 1e-12.\n' \
+                                    'Interpolation will assign node properties for integration.\n' \
+                                    'Index of the node will be returned by cell attribute\n':
+                    self.q = _cell_q[0]  # the first node is the point based on search method
+                    self.q = self.q.reshape((1, 1, 1, -1, 1))
+
             # "Tri"Linear interpolation
             case 'p-space':
                 # If the node is found in a cell
@@ -678,7 +698,7 @@ class Interpolation:
                 _shape = np.array([len(_x), len(_y), len(_z)])
 
                 if self.adaptive =='shock':
-                    _mach_no, _mach_n1 = self._shock_cell_check(self)
+                    _mach_n0, _mach_n1 = self._shock_cell_check(self)
                     # if shock is in the cell _mach_n0 > 1 > _mach_n1
                     if _mach_n0 > 1 > _mach_n1:
                         _method = 'nearest'
@@ -741,3 +761,34 @@ class Interpolation:
                                       [_J10_inv, _J11_inv, _J12_inv],
                                       [_J20_inv, _J21_inv, _J22_inv]]).reshape(3, 3)
 
+            # TODO: Thorough testing needed
+            case 'unsteady-rbf-p-space':
+                """
+                Raidal basis function interpolation in physical space for unsteady problems
+                """
+                # if the point is node return node data
+                if self.idx.info == 'Given point is a node in the domain with a tol of 1e-12.\n' \
+                                    'Interpolation will assign node properties for integration.\n' \
+                                    'Index of the node will be returned by cell attribute\n':
+                    self.q = _cell_q[0]
+                    self.q = self.q.reshape((1, 1, 1, -1, 1))
+                    return
+
+                from scipy.interpolate import RBFInterpolator as rbf
+                _rbf = rbf(_cell_grd, _cell_q)
+                self.q = _rbf(np.array(self.idx.ppoint).reshape(1, -1))
+                self.q = self.q.reshape((1, 1, 1, -1, 1))
+                # Equation is linear interpolation between time steps in unsteady data
+                # use of try-except is to avoid error in the first time step
+                # instead of keeping track of it in every step
+                try:
+                    _tau = (np.sum(self.time) - self.flow_old.time) / (self.flow.time - self.flow_old.time)
+                    _cell_q_old = self.flow_old.q[
+                                  self.idx.cell[:, 0], self.idx.cell[:, 1], self.idx.cell[:, 2], :, self.idx.block
+                                  ]
+                    _rbf_old = rbf(_cell_grd, _cell_q_old)
+                    _q_old = _rbf_old(np.array(self.idx.ppoint).reshape(1, -1))
+                    _q_old = _q_old.reshape((1, 1, 1, -1, 1))
+                    self.q = _tau * self.q + (1 - _tau) * _q_old
+                except AttributeError:
+                    return
