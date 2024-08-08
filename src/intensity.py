@@ -98,11 +98,16 @@ class Intensity:
 
         i = 0
         j = chunksize
+        pbar = tqdm.tqdm(total=len(xp), desc="Computing intensity field for particles", position=0, leave=True,
+                         colour='green')
         while j <= len(xp):
             n = max(1, cpu_count() - 1)
             pool = Pool(n)
             n_particles = len(dia_x[i:j])
-            itemp = pool.starmap(self.setup, zip(x, y, ls_thickness, ls_position,
+            # x, y, ls_thickness, ls_position,
+            # dia_x[i], dia_y[i], xp[i], yp[i], sx, sy, frx, fry, s, q, z_physical[i], i
+            itemp = pool.starmap(self.setup, zip(x, y, np.repeat(ls_thickness, n_particles),
+                                                 np.repeat(ls_position, n_particles),
                                                  dia_x[i:j], dia_y[i:j], xp[i:j], yp[i:j],
                                                  np.repeat(sx, n_particles), np.repeat(sy, n_particles),
                                                  np.repeat(frx, n_particles), np.repeat(fry, n_particles),
@@ -114,19 +119,25 @@ class Intensity:
             intensity += np.sum(itemp, axis=0)
             i = j
             j += chunksize
-            print(f"Done with {i} particles out of {len(xp)}")
+            # print(f"Done with {i} particles out of {len(xp)}")
+            pbar.update(chunksize)
 
+        # compute the remaining particles
         n = max(1, cpu_count() - 1)
         pool = Pool(n)
         n_particles = len(dia_x[i:])
-        itemp = pool.starmap(self.setup, zip(dia_x[i:], dia_y[i:], xp[i:], yp[i:],
+        itemp = pool.starmap(self.setup, zip(x, y, np.repeat(ls_thickness, n_particles),
+                                             np.repeat(ls_position, n_particles),
+                                             dia_x[i:], dia_y[i:], xp[i:], yp[i:],
                                              np.repeat(sx, n_particles), np.repeat(sy, n_particles),
                                              np.repeat(frx, n_particles), np.repeat(fry, n_particles),
                                              np.repeat(s, n_particles), np.repeat(q, n_particles), z_physical[i:],
                                              np.arange(n_particles)))
         pool.close()
         pool.join()
-        print(f"Done with {len(xp)} particles out of {len(xp)}")
+        # print(f"Done with {len(xp)} particles out of {len(xp)}")
+        pbar.update(len(xp) - i)
+        pbar.close()
 
         intensity += np.sum(itemp, axis=0)
 

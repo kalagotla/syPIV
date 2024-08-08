@@ -127,6 +127,9 @@ class CreateParticles:
             _interp = Interpolation(self.flow, _idx)
             _interp.compute(method='p-space')
 
+            _var = Variables(_interp)
+            _var.compute_velocity()
+
             _intg = Integration(_interp)
             _new_loc, _ = _intg.compute(method='pRK4', time_step=self.laser_sheet.pulse_time)
             if _new_loc is None:
