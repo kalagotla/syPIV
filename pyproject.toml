@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sypivlib"
-version = "0.0.1a1"
+version = "0.0.1a2"
 authors = [
     {name="Dilip Kalagotla"},
     {email="dilipkalagotla@gmail.com"},
@@ -21,6 +21,8 @@ dependencies = [
     "tqdm",
     "mpi4py",
     "scikit-learn",
+    "dask",
+    "numba",
     ]
 classifiers = [
     "Programming Language :: Python :: 3",
