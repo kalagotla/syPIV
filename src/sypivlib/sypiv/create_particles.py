@@ -1,7 +1,6 @@
 # Creates 3d IA from grid and flow data
 # Spawns particles on a distribution and returns their locations
 import numpy as np
-from numba import njit
 from multiprocessing import cpu_count, Pool
 from ..function.variables import Variables
 from ..function.search import Search
