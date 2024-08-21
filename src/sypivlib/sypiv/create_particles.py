@@ -7,6 +7,7 @@ from ..function.search import Search
 from ..function.interpolation import Interpolation
 from ..function.integration import Integration
 import tqdm
+from mpi4py import MPI
 rng = np.random.default_rng()
 
 
@@ -186,6 +187,41 @@ class CreateParticles:
         print(f"Total number of particles as per locations: {len(self.locations)}")
         print(f"Total number of particles as per locations2: {len(self.locations2)}")
         print(f"Failed number of particles: {len(self._failed_ids)}")
+
+        return
+
+    def compute_locations2_mpi(self):
+        """
+        Will integrate particles to new locations based on
+        Laser pulse time and velocities at their locations
+        will work with mpi4py
+        :return:
+        """
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        self.locations = np.array_split(self.locations, size)[rank]
+        # for loop for serial computation. Track using tqdm computing locations...
+        for _i, _j in enumerate(tqdm.tqdm(self.locations, desc="Computing locations for second image")):
+            self.locations2.append(self._process(_j, _i))
+
+        # delete failed tasks on each rank
+        self.locations = np.delete(self.locations, self._failed_ids, axis=0)
+        self.locations2 = np.array(self.locations2)
+        self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+
+        # gather all the locations
+        self.locations = comm.gather(self.locations, root=0)
+        self.locations2 = comm.gather(self.locations2, root=0)
+        if rank == 0:
+            self.locations = np.concatenate(self.locations, axis=0)
+            self.locations2 = np.concatenate(self.locations2, axis=0)
+            print(f"Total number of particles as per locations: {len(self.locations)}")
+            print(f"Total number of particles as per locations2: {len(self.locations2)}")
+            print(f"Failed number of particles: {len(self._failed_ids)}")
+
+        self.locations = comm.bcast(self.locations, root=0)
+        self.locations2 = comm.bcast(self.locations2, root=0)
 
         return
 

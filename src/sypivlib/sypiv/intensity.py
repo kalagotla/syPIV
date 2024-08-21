@@ -5,6 +5,7 @@ from multiprocessing import Pool
 from multiprocessing import cpu_count
 import dask.array as da
 import tqdm
+from mpi4py import MPI
 
 
 # import sys
@@ -242,3 +243,62 @@ class Intensity:
         self.values = intensity
 
         return self.values
+
+    def compute_mpi(self):
+        """
+        Ideal for computing intensity field for higher resolution images
+        uses MPI for parallel computing
+        :return:
+        """
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        # set up the data
+        (dia_x, dia_y, xp, yp, sx, sy, frx, fry, s, q, z_physical) = self.cache
+        intensity = np.zeros((self.projection.yres, self.projection.xres))
+        x = np.linspace(-self.projection.xres / 2, self.projection.xres / 2, self.projection.xres)
+        y = np.linspace(-self.projection.yres / 2, self.projection.yres / 2, self.projection.yres)
+        x, y = np.meshgrid(x, y)
+
+        # laser sheet thickness
+        ls_thickness = self.projection.particles.laser_sheet.thickness
+        ls_position = self.projection.particles.laser_sheet.position
+
+        # store length of xp
+        _len = len(xp)
+
+        # split the data
+        xp = np.array_split(xp, size)[rank]
+        yp = np.array_split(yp, size)[rank]
+        dia_x = np.array_split(dia_x, size)[rank]
+        dia_y = np.array_split(dia_y, size)[rank]
+        z_physical = np.array_split(z_physical, size)[rank]
+
+        for i in tqdm.tqdm(range(len(xp)), desc="Computing intensity field for particles on process " + str(rank)):
+            intensity += self.setup(x, y, ls_thickness, ls_position,
+                                    dia_x[i], dia_y[i], xp[i], yp[i],
+                                    sx, sy, frx, fry, s, q, z_physical[i], i)
+
+        # wait for all processes to finish
+        comm.Barrier()
+        # sum up all the intensity fields from all the processes
+        if rank == 0:
+            for i in range(1, size):
+                intensity += comm.recv(source=i)
+
+            # Average intensity field -- use _len because xp is split
+            intensity = intensity / _len
+
+            # Normalize intensity field to rbg values
+            if np.max(intensity) != 0:
+                intensity = intensity / np.max(intensity) * 255
+            print('Done computing intensity field')
+
+            self.values = intensity
+        else:
+            comm.send(intensity, dest=0)
+
+        self.values = comm.bcast(self.values, root=0)
+
+        return self.values
+

@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpi4py import MPI
 
 
 class ImageGen:
@@ -34,12 +35,45 @@ class ImageGen:
 
         return
 
+    def snap_mpi(self, snap_num=0):
+        """
+        Function to generate first snap from the intensity data
+        :return:
+        """
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        self.snap_num = snap_num
+        if rank == 0:
+            # Specified in inches --> python default
+            xsize = self.intensity.projection.xres / self.intensity.projection.dpi
+            ysize = self.intensity.projection.yres / self.intensity.projection.dpi
+            self.fig = plt.figure(figsize=[xsize, ysize], dpi=self.intensity.projection.dpi)
+            ax = plt.axes([0.0, 0.0, 1.0, 1.0])
+            ax.imshow(self.intensity.values, cmap='gray', origin='lower')
+            ax.axis('tight')
+            # remove black border
+            ax.axis('off')
+
+        return
+
     def save_snap(self, fname=None):
         if fname is None:
             fname = "snap_" + str(self.snap_num) + ".tif"
         self.fig.savefig(fname=fname)
         # close the figure
         plt.close(self.fig)
+
+        return
+
+    def save_snap_mpi(self, fname=None):
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        if rank == 0:
+            if fname is None:
+                fname = "snap_" + str(self.snap_num) + ".tif"
+            self.fig.savefig(fname=fname)
+            # close the figure
+            plt.close(self.fig)
 
         return
 
