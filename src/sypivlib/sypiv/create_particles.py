@@ -180,10 +180,12 @@ class CreateParticles:
             self.locations2.append(self._process(_j, _i))
 
         # delete failed tasks
-        self.locations = np.delete(self.locations, self._failed_ids, axis=0)
+        # self.locations = np.delete(self.locations, self._failed_ids, axis=0)
 
         self.locations2 = np.array(self.locations2)
         self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+        # convert to float64
+        self.locations2 = np.array(list(self.locations2), dtype=np.float64)
         print(f"Total number of particles as per locations: {len(self.locations)}")
         print(f"Total number of particles as per locations2: {len(self.locations2)}")
         print(f"Failed number of particles: {len(self._failed_ids)}")
@@ -206,9 +208,11 @@ class CreateParticles:
             self.locations2.append(self._process(_j, _i))
 
         # delete failed tasks on each rank
-        self.locations = np.delete(self.locations, self._failed_ids, axis=0)
+        # self.locations = np.delete(self.locations, self._failed_ids, axis=0)
         self.locations2 = np.array(self.locations2)
         self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+        # convert to float64
+        self.locations2 = np.array(list(self.locations2), dtype=np.float64)
 
         # gather all the locations
         self.locations = comm.gather(self.locations, root=0)
