@@ -27,6 +27,7 @@ class ImageGen:
         ysize = self.intensity.projection.yres / self.intensity.projection.dpi
         self.fig = plt.figure(figsize=[xsize, ysize], dpi=self.intensity.projection.dpi)
         ax = plt.axes([0.0, 0.0, 1.0, 1.0])
+        self.intensity.values = np.flipud(np.fliplr(self.intensity.values))
         ax.imshow(self.intensity.values, cmap='gray', origin='lower')
         ax.axis('tight')
         # remove black border
