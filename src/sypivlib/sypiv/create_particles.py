@@ -205,16 +205,15 @@ class CreateParticles:
         self.locations = np.array_split(self.locations, size)[rank]
         # for loop for serial computation. Track using tqdm computing locations...
         for _i, _j in enumerate(tqdm.tqdm(self.locations, desc="Computing locations for second image")):
-            self.locations2.append(self._process(_j, _i))
+            # do not append None to locations
+            _temp = self._process(_j, _i)
+            if _temp is not None:
+                self.locations2.append(_temp)
 
         # delete failed tasks on each rank
         # self.locations = np.delete(self.locations, self._failed_ids, axis=0)
         self.locations2 = np.array(self.locations2)
-        try:
-            self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
-        except IndexError:
-            print(f"Failed ids: {self._failed_ids}")
-            pass
+        # self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
         # convert to float64
         self.locations2 = np.array(list(self.locations2), dtype=np.float64)
 
