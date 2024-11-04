@@ -210,7 +210,11 @@ class CreateParticles:
         # delete failed tasks on each rank
         # self.locations = np.delete(self.locations, self._failed_ids, axis=0)
         self.locations2 = np.array(self.locations2)
-        self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+        try:
+            self.locations2 = np.delete(self.locations2, self._failed_ids, axis=0)
+        except IndexError:
+            print(f"Failed ids: {self._failed_ids}")
+            pass
         # convert to float64
         self.locations2 = np.array(list(self.locations2), dtype=np.float64)
 
