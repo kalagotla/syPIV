@@ -3,15 +3,13 @@ Entry point for the PyQt6-based planar syPIV GUI.
 
 This provides a basic "digital twin" style layout:
  - Left: 2D scene where simple objects can be positioned.
- - Right: Parameter controls (placeholders for now).
- - Bottom: Preview area that will display generated PIV images.
-
-The initial implementation is intentionally minimal and focuses on a clean,
-testable scaffold that can be extended with real syPIV integration.
+ - Right: Parameter controls including Plot3D file loading.
+ - Bottom: Preview area that will display generated PIV images or contours.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from typing import Optional
@@ -22,16 +20,13 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 # Set matplotlib backend before importing FigureCanvas
 try:
     import matplotlib
-    # Try QtAgg first (works with PyQt6)
     matplotlib.use("QtAgg")
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:
-    # Fallback to Qt5Agg if QtAgg not available
     try:
         matplotlib.use("Qt5Agg")
         from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     except ImportError:
-        # Last resort: use Agg and convert to QPixmap
         matplotlib.use("Agg")
         from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
@@ -114,12 +109,118 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         scene.setSceneRect(ia_rect.adjusted(-50, -50, 50, 50))
 
 
+class FileLoadPanel(QtWidgets.QGroupBox):
+    """
+    Panel for loading Plot3D files using text inputs and browse buttons.
+    """
+
+    files_loaded = QtCore.pyqtSignal(object, object)  # grid, flow
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__("Plot3D Files", parent)
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Grid file
+        grid_layout = QtWidgets.QHBoxLayout()
+        grid_layout.addWidget(QtWidgets.QLabel("Grid (.x):", self))
+        self.grid_path_edit = QtWidgets.QLineEdit(self)
+        self.grid_path_edit.setPlaceholderText("Path to .x file")
+        grid_browse_btn = QtWidgets.QPushButton("Browse...", self)
+        grid_browse_btn.clicked.connect(self._browse_grid_file)
+        grid_layout.addWidget(self.grid_path_edit, stretch=1)
+        grid_layout.addWidget(grid_browse_btn)
+        layout.addLayout(grid_layout)
+
+        # Flow file
+        flow_layout = QtWidgets.QHBoxLayout()
+        flow_layout.addWidget(QtWidgets.QLabel("Flow (.q):", self))
+        self.flow_path_edit = QtWidgets.QLineEdit(self)
+        self.flow_path_edit.setPlaceholderText("Path to .q file")
+        flow_browse_btn = QtWidgets.QPushButton("Browse...", self)
+        flow_browse_btn.clicked.connect(self._browse_flow_file)
+        flow_layout.addWidget(self.flow_path_edit, stretch=1)
+        flow_layout.addWidget(flow_browse_btn)
+        layout.addLayout(flow_layout)
+
+        # Load button
+        self.load_btn = QtWidgets.QPushButton("Load Files", self)
+        self.load_btn.clicked.connect(self._load_files)
+        layout.addWidget(self.load_btn)
+
+        self._status_label = QtWidgets.QLabel("", self)
+        self._status_label.setWordWrap(True)
+        layout.addWidget(self._status_label)
+
+    def _browse_grid_file(self) -> None:
+        """Open file dialog for grid file."""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Plot3D grid file (.x)",
+            self.grid_path_edit.text() or "",
+            "Plot3D grid (*.x);;All files (*)",
+        )
+        if path:
+            self.grid_path_edit.setText(path)
+
+    def _browse_flow_file(self) -> None:
+        """Open file dialog for flow file."""
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Plot3D flow file (.q)",
+            self.flow_path_edit.text() or "",
+            "Plot3D flow (*.q);;All files (*)",
+        )
+        if path:
+            self.flow_path_edit.setText(path)
+
+    def _load_files(self) -> None:
+        """Load the Plot3D files and emit signal."""
+        grid_path = self.grid_path_edit.text().strip()
+        flow_path = self.flow_path_edit.text().strip()
+
+        if not grid_path:
+            self._status_label.setText("<font color='red'>Please specify grid file path</font>")
+            return
+
+        if not flow_path:
+            self._status_label.setText("<font color='red'>Please specify flow file path</font>")
+            return
+
+        if not os.path.exists(grid_path):
+            self._status_label.setText(f"<font color='red'>Grid file not found: {grid_path}</font>")
+            return
+
+        if not os.path.exists(flow_path):
+            self._status_label.setText(f"<font color='red'>Flow file not found: {flow_path}</font>")
+            return
+
+        self._status_label.setText("Loading files...")
+        self.load_btn.setEnabled(False)
+        QtWidgets.QApplication.processEvents()
+
+        try:
+            grid = GridIO(grid_path)
+            grid.read_grid()
+            flow = FlowIO(flow_path)
+            flow.read_flow()
+
+            self._status_label.setText(f"<font color='green'>Loaded: {os.path.basename(grid_path)}, {os.path.basename(flow_path)}</font>")
+            self.files_loaded.emit(grid, flow)
+
+        except Exception as exc:
+            self._status_label.setText(f"<font color='red'>Error: {str(exc)}</font>")
+            import traceback
+            print(f"Error loading Plot3D files:\n{traceback.format_exc()}", file=sys.stderr)
+        finally:
+            self.load_btn.setEnabled(True)
+
+
 class ParameterPanel(QtWidgets.QWidget):
     """
     Right-hand panel for adjusting parameters that affect PIV generation.
-
-    For now this contains only a few placeholder controls; these map cleanly
-    onto typical syPIV configuration options (e.g. seeding density, pulse time).
     """
 
     parameters_changed = QtCore.pyqtSignal()
@@ -129,25 +230,36 @@ class ParameterPanel(QtWidgets.QWidget):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        layout = QtWidgets.QFormLayout(self)
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # File loading panel
+        self.file_panel = FileLoadPanel(self)
+        layout.addWidget(self.file_panel)
+
+        layout.addWidget(QtWidgets.QLabel("PIV Parameters:", self))
+
+        # PIV parameters
+        param_layout = QtWidgets.QFormLayout()
 
         self.seeding_density_spin = QtWidgets.QDoubleSpinBox(self)
         self.seeding_density_spin.setRange(0.0, 1e6)
         self.seeding_density_spin.setDecimals(0)
         self.seeding_density_spin.setValue(1e4)
-        layout.addRow("Seeding concentration [1/m³]:", self.seeding_density_spin)
+        param_layout.addRow("Seeding concentration [1/m³]:", self.seeding_density_spin)
 
         self.pulse_time_spin = QtWidgets.QDoubleSpinBox(self)
         self.pulse_time_spin.setRange(0.0, 1.0)
         self.pulse_time_spin.setDecimals(5)
         self.pulse_time_spin.setSingleStep(1e-4)
         self.pulse_time_spin.setValue(5e-3)
-        layout.addRow("Laser pulse time [s]:", self.pulse_time_spin)
+        param_layout.addRow("Laser pulse time [s]:", self.pulse_time_spin)
 
         self.camera_dpi_spin = QtWidgets.QSpinBox(self)
         self.camera_dpi_spin.setRange(50, 1200)
         self.camera_dpi_spin.setValue(300)
-        layout.addRow("Camera DPI:", self.camera_dpi_spin)
+        param_layout.addRow("Camera DPI:", self.camera_dpi_spin)
+
+        layout.addLayout(param_layout)
 
         # Emit a single signal whenever any parameter changes
         for widget in (self.seeding_density_spin, self.pulse_time_spin, self.camera_dpi_spin):
@@ -175,7 +287,6 @@ class PreviewPanel(QtWidgets.QWidget):
             layout.addWidget(self.canvas)
             self._matplotlib_ok = True
         except Exception as e:
-            # Fallback if matplotlib backend fails
             self._matplotlib_ok = False
             self._error_label = QtWidgets.QLabel(
                 f"Matplotlib initialization failed: {e}\n"
@@ -192,7 +303,7 @@ class PreviewPanel(QtWidgets.QWidget):
         """
         if not self._matplotlib_ok:
             return
-            
+
         try:
             self.figure.clear()
             ax = self.figure.add_subplot(111)
@@ -216,7 +327,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("syPIV Planar Digital Twin (Prototype)")
+        self.setWindowTitle("syPIV Planar Digital Twin")
         self._grid: Optional[GridIO] = None
         self._flow: Optional[FlowIO] = None
         self._current_variable: str = "rho"
@@ -246,15 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
         root_layout.addWidget(top_split, stretch=3)
         root_layout.addWidget(self.preview_panel, stretch=1)
 
-        # Menu bar
-        menubar = self.menuBar()
-        
-        file_menu = menubar.addMenu("&File")
-        self.load_plot3d_action = file_menu.addAction("&Load Plot3D...")
-        self.load_plot3d_action.setShortcut("Ctrl+O")
-        self.load_plot3d_action.setToolTip("Load Plot3D grid (.x) and flow (.q) files for contour visualization.")
-        
-        # Toolbar / actions
+        # Toolbar
         toolbar = self.addToolBar("Simulation")
 
         self.variable_combo = QtWidgets.QComboBox(self)
@@ -269,7 +372,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.run_action.setToolTip("Run a PIV image generation using current configuration.")
 
     def _connect_signals(self) -> None:
-        self.load_plot3d_action.triggered.connect(self.on_load_plot3d_clicked)
+        self.param_panel.file_panel.files_loaded.connect(self.on_files_loaded)
         self.variable_combo.currentTextChanged.connect(self.on_variable_changed)
         self.run_action.triggered.connect(self.on_run_clicked)
         self.param_panel.parameters_changed.connect(self.on_parameters_changed)
@@ -277,94 +380,34 @@ class MainWindow(QtWidgets.QMainWindow):
     # -----------------------------
     # Slots / event handlers
     # -----------------------------
-    @QtCore.pyqtSlot()
-    def on_load_plot3d_clicked(self) -> None:
-        """
-        Let the user select Plot3D grid (.x) and flow (.q) files and show a contour.
-        Use QTimer to defer execution and avoid immediate Qt issues.
-        """
-        # Defer file dialog to next event loop iteration to avoid segfaults
-        QtCore.QTimer.singleShot(0, self._do_load_plot3d)
-    
-    def _do_load_plot3d(self) -> None:
-        """
-        Actually perform the Plot3D file loading (deferred from button click).
-        """
-        try:
-            x_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self,
-                "Select Plot3D grid file (.x)",
-                "",
-                "Plot3D grid (*.x);;All files (*)",
-            )
-            if not x_path:
-                return
-
-            q_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self,
-                "Select Plot3D flow file (.q)",
-                "",
-                "Plot3D flow (*.q);;All files (*)",
-            )
-            if not q_path:
-                return
-
-            # Show loading message
-            self.statusBar().showMessage("Loading Plot3D files...", 0)
-            QtWidgets.QApplication.processEvents()
-
-            grid = GridIO(x_path)
-            grid.read_grid()
-            flow = FlowIO(q_path)
-            flow.read_flow()
-
-            self._grid = grid
-            self._flow = flow
-            self.statusBar().showMessage(f"Loaded Plot3D: {x_path} / {q_path}", 4000)
-            self._update_contour()
-            
-        except Exception as exc:  # pragma: no cover - GUI error dialog
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Error loading Plot3D",
-                f"Failed to read Plot3D files:\n{exc}\n\n{type(exc).__name__}: {str(exc)}",
-            )
-            self.statusBar().showMessage("Plot3D loading failed", 3000)
+    @QtCore.pyqtSlot(object, object)
+    def on_files_loaded(self, grid: GridIO, flow: FlowIO) -> None:
+        """Handle Plot3D files being loaded."""
+        self._grid = grid
+        self._flow = flow
+        self.statusBar().showMessage("Plot3D files loaded successfully", 3000)
+        self._update_contour()
 
     @QtCore.pyqtSlot(str)
     def on_variable_changed(self, name: str) -> None:
-        """
-        React to variable selection changes and refresh the contour.
-        """
+        """React to variable selection changes and refresh the contour."""
         self._current_variable = name
         self._update_contour()
 
     @QtCore.pyqtSlot()
     def on_run_clicked(self) -> None:
-        """
-        Trigger a PIV generation.
-
-        In this prototype we only update the label text. In a subsequent
-        iteration this method will:
-          - Read the current object positions from the scene.
-          - Build or update a syPIV configuration.
-          - Call the image generation pipeline and render the resulting image.
-        """
+        """Trigger a PIV generation."""
         msg_box = QtWidgets.QMessageBox(self)
         msg_box.setWindowTitle("Generate PIV")
         msg_box.setText(
             "Generate PIV clicked.\n"
-            "This prototype currently focuses on Plot3D contour visualization.\n"
-            "In a subsequent step this action will be wired to the syPIV image_gen module.",
+            "This will be wired to the syPIV image_gen module in a future update.",
         )
         msg_box.exec()
 
     @QtCore.pyqtSlot()
     def on_parameters_changed(self) -> None:
-        """
-        Handle updates to parameters from the control panel.
-        """
-        # For now we only reflect that parameters changed in the window status bar.
+        """Handle updates to parameters from the control panel."""
         self.statusBar().showMessage("Parameters updated", 2000)
 
     # -----------------------------
@@ -378,39 +421,46 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._grid is None or self._flow is None:
             return
 
-        ni0 = int(self._grid.ni[0])
-        nj0 = int(self._grid.nj[0])
-        nk0 = int(self._grid.nk[0])
+        try:
+            ni0 = int(self._grid.ni[0])
+            nj0 = int(self._grid.nj[0])
+            nk0 = int(self._grid.nk[0])
 
-        # Use mid-plane in k-direction
-        k_idx = nk0 // 2
+            # Use mid-plane in k-direction
+            k_idx = nk0 // 2
 
-        x = self._grid.grd[:ni0, :nj0, k_idx, 0, 0]
-        y = self._grid.grd[:ni0, :nj0, k_idx, 1, 0]
-        q = self._flow.q[:ni0, :nj0, k_idx, :, 0]
+            x = self._grid.grd[:ni0, :nj0, k_idx, 0, 0]
+            y = self._grid.grd[:ni0, :nj0, k_idx, 1, 0]
+            q = self._flow.q[:ni0, :nj0, k_idx, :, 0]
 
-        rho = q[..., 0]
-        u = q[..., 1] / rho
-        v = q[..., 2] / rho
-        w = q[..., 3] / rho
+            rho = q[..., 0]
+            u = q[..., 1] / rho
+            v = q[..., 2] / rho
+            w = q[..., 3] / rho
 
-        if self._current_variable == "rho":
-            field = rho
-            title = r"$\\rho$ (density)"
-        elif self._current_variable == "u":
-            field = u
-            title = "u-velocity"
-        elif self._current_variable == "v":
-            field = v
-            title = "v-velocity"
-        elif self._current_variable == "w":
-            field = w
-            title = "w-velocity"
-        else:  # vel_mag
-            field = np.sqrt(u**2 + v**2 + w**2)
-            title = "|V| (velocity magnitude)"
+            if self._current_variable == "rho":
+                field = rho
+                title = r"$\rho$ (density)"
+            elif self._current_variable == "u":
+                field = u
+                title = "u-velocity"
+            elif self._current_variable == "v":
+                field = v
+                title = "v-velocity"
+            elif self._current_variable == "w":
+                field = w
+                title = "w-velocity"
+            else:  # vel_mag
+                field = np.sqrt(u**2 + v**2 + w**2)
+                title = "|V| (velocity magnitude)"
 
-        self.preview_panel.show_contour(x, y, field, f"{title} (k index = {k_idx})")
+            self.preview_panel.show_contour(x, y, field, f"{title} (k index = {k_idx})")
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Contour update error",
+                f"Failed to update contour:\n{e}",
+            )
 
 
 def main() -> None:
@@ -432,4 +482,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
