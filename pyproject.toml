@@ -24,6 +24,7 @@ dependencies = [
     "dask",
     "numba",
     "huggingface-hub>=1.4.1",
+    "PyQt6",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -49,3 +50,6 @@ exclude = [
 [project.urls]
 homepage = "https://github.com/kalagotla/syPIV"
 issues = "https://github.com/kalagotla/syPIV/issues"
+
+[project.scripts]
+sypiv-gui = "sypivlib.gui.main:main"
