@@ -18,7 +18,23 @@ from typing import Optional
 
 import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+
+# Set matplotlib backend before importing FigureCanvas
+try:
+    import matplotlib
+    # Try QtAgg first (works with PyQt6)
+    matplotlib.use("QtAgg")
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+except ImportError:
+    # Fallback to Qt5Agg if QtAgg not available
+    try:
+        matplotlib.use("Qt5Agg")
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+    except ImportError:
+        # Last resort: use Agg and convert to QPixmap
+        matplotlib.use("Agg")
+        from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
 from matplotlib.figure import Figure
 
 from sypivlib.function.dataio import FlowIO, GridIO
@@ -153,21 +169,44 @@ class PreviewPanel(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
 
-        self.figure = Figure()
-        self.canvas = FigureCanvas(self.figure)
-        layout.addWidget(self.canvas)
+        try:
+            self.figure = Figure()
+            self.canvas = FigureCanvas(self.figure)
+            layout.addWidget(self.canvas)
+            self._matplotlib_ok = True
+        except Exception as e:
+            # Fallback if matplotlib backend fails
+            self._matplotlib_ok = False
+            self._error_label = QtWidgets.QLabel(
+                f"Matplotlib initialization failed: {e}\n"
+                "Contour visualization will not be available.",
+                self
+            )
+            self._error_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            self._error_label.setWordWrap(True)
+            layout.addWidget(self._error_label)
 
     def show_contour(self, x: np.ndarray, y: np.ndarray, field: np.ndarray, title: str) -> None:
         """
         Render a filled contour of the provided scalar field.
         """
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        cf = ax.contourf(x, y, field, levels=50, cmap="viridis")
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_title(title)
-        self.figure.colorbar(cf, ax=ax)
-        self.canvas.draw_idle()
+        if not self._matplotlib_ok:
+            return
+            
+        try:
+            self.figure.clear()
+            ax = self.figure.add_subplot(111)
+            cf = ax.contourf(x, y, field, levels=50, cmap="viridis")
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_title(title)
+            self.figure.colorbar(cf, ax=ax)
+            self.canvas.draw_idle()
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self.parent(),
+                "Contour rendering error",
+                f"Failed to render contour:\n{e}",
+            )
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -207,12 +246,16 @@ class MainWindow(QtWidgets.QMainWindow):
         root_layout.addWidget(top_split, stretch=3)
         root_layout.addWidget(self.preview_panel, stretch=1)
 
+        # Menu bar
+        menubar = self.menuBar()
+        
+        file_menu = menubar.addMenu("&File")
+        self.load_plot3d_action = file_menu.addAction("&Load Plot3D...")
+        self.load_plot3d_action.setShortcut("Ctrl+O")
+        self.load_plot3d_action.setToolTip("Load Plot3D grid (.x) and flow (.q) files for contour visualization.")
+        
         # Toolbar / actions
         toolbar = self.addToolBar("Simulation")
-        self.load_plot3d_action = toolbar.addAction("Load Plot3D")
-        self.load_plot3d_action.setToolTip("Load Plot3D grid (.x) and flow (.q) files for contour visualization.")
-
-        toolbar.addSeparator()
 
         self.variable_combo = QtWidgets.QComboBox(self)
         self.variable_combo.addItems(["rho", "u", "v", "w", "vel_mag"])
@@ -238,42 +281,55 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_load_plot3d_clicked(self) -> None:
         """
         Let the user select Plot3D grid (.x) and flow (.q) files and show a contour.
+        Use QTimer to defer execution and avoid immediate Qt issues.
         """
-        x_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Select Plot3D grid file (.x)",
-            "",
-            "Plot3D grid (*.x);;All files (*)",
-        )
-        if not x_path:
-            return
-
-        q_path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Select Plot3D flow file (.q)",
-            "",
-            "Plot3D flow (*.q);;All files (*)",
-        )
-        if not q_path:
-            return
-
+        # Defer file dialog to next event loop iteration to avoid segfaults
+        QtCore.QTimer.singleShot(0, self._do_load_plot3d)
+    
+    def _do_load_plot3d(self) -> None:
+        """
+        Actually perform the Plot3D file loading (deferred from button click).
+        """
         try:
+            x_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self,
+                "Select Plot3D grid file (.x)",
+                "",
+                "Plot3D grid (*.x);;All files (*)",
+            )
+            if not x_path:
+                return
+
+            q_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self,
+                "Select Plot3D flow file (.q)",
+                "",
+                "Plot3D flow (*.q);;All files (*)",
+            )
+            if not q_path:
+                return
+
+            # Show loading message
+            self.statusBar().showMessage("Loading Plot3D files...", 0)
+            QtWidgets.QApplication.processEvents()
+
             grid = GridIO(x_path)
             grid.read_grid()
             flow = FlowIO(q_path)
             flow.read_flow()
+
+            self._grid = grid
+            self._flow = flow
+            self.statusBar().showMessage(f"Loaded Plot3D: {x_path} / {q_path}", 4000)
+            self._update_contour()
+            
         except Exception as exc:  # pragma: no cover - GUI error dialog
             QtWidgets.QMessageBox.critical(
                 self,
                 "Error loading Plot3D",
-                f"Failed to read Plot3D files:\n{exc}",
+                f"Failed to read Plot3D files:\n{exc}\n\n{type(exc).__name__}: {str(exc)}",
             )
-            return
-
-        self._grid = grid
-        self._flow = flow
-        self.statusBar().showMessage(f"Loaded Plot3D: {x_path} / {q_path}", 4000)
-        self._update_contour()
+            self.statusBar().showMessage("Plot3D loading failed", 3000)
 
     @QtCore.pyqtSlot(str)
     def on_variable_changed(self, name: str) -> None:
@@ -361,11 +417,17 @@ def main() -> None:
     """
     Launch the planar syPIV GUI.
     """
-    app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow()
-    window.resize(1200, 800)
-    window.show()
-    sys.exit(app.exec())
+    try:
+        app = QtWidgets.QApplication(sys.argv)
+        window = MainWindow()
+        window.resize(1200, 800)
+        window.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        print(f"Fatal error launching GUI: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
