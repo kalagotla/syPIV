@@ -93,7 +93,8 @@ class GridIO:
         credit: Paul Orkwis
         date: 11-04/2021
         """
-        with open(self.filename, 'r') as grid:
+        # Use binary mode; NumPy's fromfile expects a binary stream.
+        with open(self.filename, 'rb') as grid:
             # Read-in number of blocks
             self.nb = np.fromfile(grid, dtype='i4', count=1)[0]
 
@@ -392,7 +393,8 @@ class FlowIO:
         credit: Paul Orkwis
         date: 10-05/2021
         """
-        with open(self.filename, 'r') as data:
+        # Use binary mode; NumPy's fromfile expects a binary stream.
+        with open(self.filename, 'rb') as data:
             self.nb = np.fromfile(data, dtype='i4', count=1)[0]
 
             # Read in the i, j, k values for blocks
