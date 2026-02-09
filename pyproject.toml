@@ -23,7 +23,8 @@ dependencies = [
     "scikit-learn",
     "dask",
     "numba",
-    ]
+    "huggingface-hub>=1.4.1",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

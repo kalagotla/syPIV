@@ -2,5 +2,7 @@
 /data/
 # Ignore compiled files across the repo
 **/__pycache__/
+# Ignore Python packaging metadata
+*.egg-info/
 # Ignore pycharm project files
 /.idea/
