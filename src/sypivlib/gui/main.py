@@ -22,15 +22,19 @@ try:
     import matplotlib
     matplotlib.use("QtAgg")
     from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 except ImportError:
     try:
         matplotlib.use("Qt5Agg")
         from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
     except ImportError:
         matplotlib.use("Agg")
         from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+        NavigationToolbar = None
 
 from matplotlib.figure import Figure
+from matplotlib.widgets import RectangleSelector
 
 from sypivlib.function.dataio import FlowIO, GridIO
 
@@ -65,6 +69,7 @@ class DraggableRectItem(QtWidgets.QGraphicsRectItem):
 class PlanarSceneView(QtWidgets.QGraphicsView):
     """
     Graphics view showing a simple 2D representation of the planar setup.
+    Displays the interrogation area (IA) region selected from the contour plot.
     """
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -72,6 +77,7 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         self.setScene(QtWidgets.QGraphicsScene(self))
         self.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         self.setDragMode(QtWidgets.QGraphicsView.DragMode.RubberBandDrag)
+        self._ia_item = None
         self._init_default_scene()
 
     def _init_default_scene(self) -> None:
@@ -82,13 +88,14 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         assert scene is not None
 
         # Background rectangle representing the interrogation area (IA)
+        # Default size, will be updated when region is selected
         ia_rect = QtCore.QRectF(-200, -100, 400, 200)
-        ia_item = scene.addRect(
+        self._ia_item = scene.addRect(
             ia_rect,
-            pen=QtGui.QPen(QtGui.QColor("lightgray")),
-            brush=QtGui.QBrush(QtGui.QColor(240, 240, 240)),
+            pen=QtGui.QPen(QtGui.QColor("lightgray"), 2),
+            brush=QtGui.QBrush(QtGui.QColor(240, 240, 240, 100)),
         )
-        ia_item.setZValue(-1)
+        self._ia_item.setZValue(-1)
 
         # Sample objects that can be moved around
         objects = [
@@ -107,6 +114,26 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
             scene.addItem(DraggableRectItem(cfg))
 
         scene.setSceneRect(ia_rect.adjusted(-50, -50, 50, 50))
+
+    def update_ia_region(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        """
+        Update the interrogation area rectangle to match the selected region.
+        """
+        if self._ia_item is None:
+            return
+        
+        # Create rectangle from bounds
+        ia_rect = QtCore.QRectF(x_min, y_min, x_max - x_min, y_max - y_min)
+        self._ia_item.setRect(ia_rect)
+        
+        # Update scene rect to include the new IA region
+        scene = self.scene()
+        if scene is not None:
+            margin = max(abs(x_max - x_min), abs(y_max - y_min)) * 0.2
+            scene.setSceneRect(ia_rect.adjusted(-margin, -margin, margin, margin))
+        
+        # Force redraw
+        self.viewport().update()
 
 
 class FileLoadPanel(QtWidgets.QGroupBox):
@@ -275,7 +302,10 @@ class ParameterPanel(QtWidgets.QWidget):
 class PreviewPanel(QtWidgets.QWidget):
     """
     Bottom panel that displays contours or PIV-like images using matplotlib.
+    Supports interactive navigation and interrogation region selection.
     """
+
+    region_selected = QtCore.pyqtSignal(float, float, float, float)  # x_min, x_max, y_min, y_max
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -284,8 +314,18 @@ class PreviewPanel(QtWidgets.QWidget):
         try:
             self.figure = Figure()
             self.canvas = FigureCanvas(self.figure)
+            
+            # Add navigation toolbar for zoom/pan
+            if NavigationToolbar is not None:
+                self.toolbar = NavigationToolbar(self.canvas, self)
+                layout.addWidget(self.toolbar)
+            
             layout.addWidget(self.canvas)
             self._matplotlib_ok = True
+            self._selector = None
+            self._current_x = None
+            self._current_y = None
+            self._ax = None
         except Exception as e:
             self._matplotlib_ok = False
             self._error_label = QtWidgets.QLabel(
@@ -300,17 +340,48 @@ class PreviewPanel(QtWidgets.QWidget):
     def show_contour(self, x: np.ndarray, y: np.ndarray, field: np.ndarray, title: str) -> None:
         """
         Render a filled contour of the provided scalar field.
+        Enables interactive region selection.
         """
         if not self._matplotlib_ok:
             return
 
         try:
             self.figure.clear()
-            ax = self.figure.add_subplot(111)
-            cf = ax.contourf(x, y, field, levels=50, cmap="viridis")
-            ax.set_aspect("equal", adjustable="box")
-            ax.set_title(title)
-            self.figure.colorbar(cf, ax=ax)
+            self._ax = self.figure.add_subplot(111)
+            cf = self._ax.contourf(x, y, field, levels=50, cmap="viridis")
+            self._ax.set_aspect("equal", adjustable="box")
+            self._ax.set_title(title)
+            self.figure.colorbar(cf, ax=self._ax)
+            
+            # Store coordinates for region selection
+            self._current_x = x
+            self._current_y = y
+            
+            # Remove old selector if it exists
+            if self._selector is not None:
+                self._selector.set_active(False)
+            
+            # Add rectangle selector for interrogation region
+            self._selector = RectangleSelector(
+                self._ax,
+                self._on_region_selected,
+                useblit=True,
+                button=[1],  # Left mouse button
+                minspanx=5, minspany=5,
+                spancoords='pixels',
+                interactive=True
+            )
+            
+            # Add instruction text
+            self._ax.text(
+                0.02, 0.98,
+                "Click and drag to select\ninterrogation region",
+                transform=self._ax.transAxes,
+                fontsize=9,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            )
+            
             self.canvas.draw_idle()
         except Exception as e:
             QtWidgets.QMessageBox.warning(
@@ -318,6 +389,33 @@ class PreviewPanel(QtWidgets.QWidget):
                 "Contour rendering error",
                 f"Failed to render contour:\n{e}",
             )
+
+    def _on_region_selected(self, eclick, erelease) -> None:
+        """
+        Callback when a region is selected with the rectangle selector.
+        """
+        if self._ax is None or self._current_x is None or self._current_y is None:
+            return
+        
+        # Get the selected region bounds in data coordinates
+        x1, y1 = eclick.xdata, eclick.ydata
+        x2, y2 = erelease.xdata, erelease.ydata
+        
+        if x1 is None or x2 is None or y1 is None or y2 is None:
+            return
+        
+        x_min = min(x1, x2)
+        x_max = max(x1, x2)
+        y_min = min(y1, y2)
+        y_max = max(y1, y2)
+        
+        # Emit signal with selected region bounds
+        self.region_selected.emit(x_min, x_max, y_min, y_max)
+
+    def set_region_selection_enabled(self, enabled: bool) -> None:
+        """Enable or disable the rectangle selector."""
+        if self._selector is not None:
+            self._selector.set_active(enabled)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -368,6 +466,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         toolbar.addSeparator()
 
+        self.select_region_action = toolbar.addAction("Select IA Region")
+        self.select_region_action.setCheckable(True)
+        self.select_region_action.setToolTip("Enable/disable interrogation region selection on contour plot (click and drag).")
+        self.select_region_action.setChecked(True)
+
+        toolbar.addSeparator()
+
         self.run_action = toolbar.addAction("Generate PIV")
         self.run_action.setToolTip("Run a PIV image generation using current configuration.")
 
@@ -376,6 +481,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.variable_combo.currentTextChanged.connect(self.on_variable_changed)
         self.run_action.triggered.connect(self.on_run_clicked)
         self.param_panel.parameters_changed.connect(self.on_parameters_changed)
+        self.preview_panel.region_selected.connect(self.on_region_selected)
+        self.select_region_action.toggled.connect(self.on_region_selection_toggled)
 
     # -----------------------------
     # Slots / event handlers
@@ -409,6 +516,20 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_parameters_changed(self) -> None:
         """Handle updates to parameters from the control panel."""
         self.statusBar().showMessage("Parameters updated", 2000)
+
+    @QtCore.pyqtSlot(float, float, float, float)
+    def on_region_selected(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
+        """Handle interrogation region selection from the contour plot."""
+        self.scene_view.update_ia_region(x_min, x_max, y_min, y_max)
+        self.statusBar().showMessage(
+            f"IA region selected: x=[{x_min:.3f}, {x_max:.3f}], y=[{y_min:.3f}, {y_max:.3f}]",
+            3000
+        )
+
+    @QtCore.pyqtSlot(bool)
+    def on_region_selection_toggled(self, enabled: bool) -> None:
+        """Enable or disable region selection on the contour plot."""
+        self.preview_panel.set_region_selection_enabled(enabled)
 
     # -----------------------------
     # Internal helpers
