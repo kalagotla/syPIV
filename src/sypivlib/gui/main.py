@@ -14,8 +14,14 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from typing import Optional
 
+import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
+from sypivlib.function.dataio import FlowIO, GridIO
 
 
 @dataclass
@@ -140,25 +146,28 @@ class ParameterPanel(QtWidgets.QWidget):
 
 class PreviewPanel(QtWidgets.QWidget):
     """
-    Bottom panel that will eventually display generated PIV images.
-
-    The initial implementation only shows a placeholder label, to keep the
-    scaffolding light-weight and avoid pulling a Qt-matplotlib dependency
-    into the very first iteration.
+    Bottom panel that displays contours or PIV-like images using matplotlib.
     """
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
 
-        self.label = QtWidgets.QLabel(
-            "PIV image preview will appear here.\n"
-            "In the next iteration this will be wired to the syPIV image_gen module.",
-            self,
-        )
-        self.label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.label.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        layout.addWidget(self.label)
+        self.figure = Figure()
+        self.canvas = FigureCanvas(self.figure)
+        layout.addWidget(self.canvas)
+
+    def show_contour(self, x: np.ndarray, y: np.ndarray, field: np.ndarray, title: str) -> None:
+        """
+        Render a filled contour of the provided scalar field.
+        """
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        cf = ax.contourf(x, y, field, levels=50, cmap="viridis")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_title(title)
+        self.figure.colorbar(cf, ax=ax)
+        self.canvas.draw_idle()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -169,6 +178,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("syPIV Planar Digital Twin (Prototype)")
+        self._grid: Optional[GridIO] = None
+        self._flow: Optional[FlowIO] = None
+        self._current_variable: str = "rho"
         self._build_ui()
         self._connect_signals()
 
@@ -197,16 +209,80 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Toolbar / actions
         toolbar = self.addToolBar("Simulation")
+        self.load_plot3d_action = toolbar.addAction("Load Plot3D")
+        self.load_plot3d_action.setToolTip("Load Plot3D grid (.x) and flow (.q) files for contour visualization.")
+
+        toolbar.addSeparator()
+
+        self.variable_combo = QtWidgets.QComboBox(self)
+        self.variable_combo.addItems(["rho", "u", "v", "w", "vel_mag"])
+        self.variable_combo.setToolTip("Select flow variable to contour.")
+        toolbar.addWidget(QtWidgets.QLabel("Variable:", self))
+        toolbar.addWidget(self.variable_combo)
+
+        toolbar.addSeparator()
+
         self.run_action = toolbar.addAction("Generate PIV")
         self.run_action.setToolTip("Run a PIV image generation using current configuration.")
 
     def _connect_signals(self) -> None:
+        self.load_plot3d_action.triggered.connect(self.on_load_plot3d_clicked)
+        self.variable_combo.currentTextChanged.connect(self.on_variable_changed)
         self.run_action.triggered.connect(self.on_run_clicked)
         self.param_panel.parameters_changed.connect(self.on_parameters_changed)
 
     # -----------------------------
     # Slots / event handlers
     # -----------------------------
+    @QtCore.pyqtSlot()
+    def on_load_plot3d_clicked(self) -> None:
+        """
+        Let the user select Plot3D grid (.x) and flow (.q) files and show a contour.
+        """
+        x_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Plot3D grid file (.x)",
+            "",
+            "Plot3D grid (*.x);;All files (*)",
+        )
+        if not x_path:
+            return
+
+        q_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Plot3D flow file (.q)",
+            "",
+            "Plot3D flow (*.q);;All files (*)",
+        )
+        if not q_path:
+            return
+
+        try:
+            grid = GridIO(x_path)
+            grid.read_grid()
+            flow = FlowIO(q_path)
+            flow.read_flow()
+        except Exception as exc:  # pragma: no cover - GUI error dialog
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error loading Plot3D",
+                f"Failed to read Plot3D files:\n{exc}",
+            )
+            return
+
+        self._grid = grid
+        self._flow = flow
+        self.statusBar().showMessage(f"Loaded Plot3D: {x_path} / {q_path}", 4000)
+        self._update_contour()
+
+    @QtCore.pyqtSlot(str)
+    def on_variable_changed(self, name: str) -> None:
+        """
+        React to variable selection changes and refresh the contour.
+        """
+        self._current_variable = name
+        self._update_contour()
+
     @QtCore.pyqtSlot()
     def on_run_clicked(self) -> None:
         """
@@ -218,12 +294,14 @@ class MainWindow(QtWidgets.QMainWindow):
           - Build or update a syPIV configuration.
           - Call the image generation pipeline and render the resulting image.
         """
-        msg = (
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("Generate PIV")
+        msg_box.setText(
             "Generate PIV clicked.\n"
-            "This prototype does not yet call the full syPIV pipeline, "
-            "but the wiring is in place."
+            "This prototype currently focuses on Plot3D contour visualization.\n"
+            "In a subsequent step this action will be wired to the syPIV image_gen module.",
         )
-        self.preview_panel.label.setText(msg)
+        msg_box.exec()
 
     @QtCore.pyqtSlot()
     def on_parameters_changed(self) -> None:
@@ -232,6 +310,51 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         # For now we only reflect that parameters changed in the window status bar.
         self.statusBar().showMessage("Parameters updated", 2000)
+
+    # -----------------------------
+    # Internal helpers
+    # -----------------------------
+    def _update_contour(self) -> None:
+        """
+        If Plot3D data is loaded, draw a contour of the selected variable
+        on the mid-span plane of block 0.
+        """
+        if self._grid is None or self._flow is None:
+            return
+
+        ni0 = int(self._grid.ni[0])
+        nj0 = int(self._grid.nj[0])
+        nk0 = int(self._grid.nk[0])
+
+        # Use mid-plane in k-direction
+        k_idx = nk0 // 2
+
+        x = self._grid.grd[:ni0, :nj0, k_idx, 0, 0]
+        y = self._grid.grd[:ni0, :nj0, k_idx, 1, 0]
+        q = self._flow.q[:ni0, :nj0, k_idx, :, 0]
+
+        rho = q[..., 0]
+        u = q[..., 1] / rho
+        v = q[..., 2] / rho
+        w = q[..., 3] / rho
+
+        if self._current_variable == "rho":
+            field = rho
+            title = r"$\\rho$ (density)"
+        elif self._current_variable == "u":
+            field = u
+            title = "u-velocity"
+        elif self._current_variable == "v":
+            field = v
+            title = "v-velocity"
+        elif self._current_variable == "w":
+            field = w
+            title = "w-velocity"
+        else:  # vel_mag
+            field = np.sqrt(u**2 + v**2 + w**2)
+            title = "|V| (velocity magnitude)"
+
+        self.preview_panel.show_contour(x, y, field, f"{title} (k index = {k_idx})")
 
 
 def main() -> None:
