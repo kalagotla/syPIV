@@ -88,9 +88,10 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         scene = self.scene()
         assert scene is not None
 
-        # Background rectangle representing the interrogation area (IA)
-        # Default size, will be updated when region is selected
-        ia_rect = QtCore.QRectF(-200, -100, 400, 200)
+        # Background rectangle representing the interrogation area (IA).
+        # Initial size is arbitrary; it will be updated to match the selected IA
+        # from the contour plot and the view will auto-fit.
+        ia_rect = QtCore.QRectF(-1.0, -0.5, 2.0, 1.0)
         self._ia_item = scene.addRect(
             ia_rect,
             pen=QtGui.QPen(QtGui.QColor("lightgray"), 2),
@@ -98,17 +99,19 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         )
         self._ia_item.setZValue(-1)
 
-        # Sample objects that can be moved around
+        # Sample objects that can be moved around; start them near the IA centre
+        cx = ia_rect.center().x()
+        cy = ia_rect.center().y()
         objects = [
             SceneObjectConfig(
                 name="Object A",
                 color=QtGui.QColor("red"),
-                rect=QtCore.QRectF(-50, -20, 40, 40),
+                rect=QtCore.QRectF(cx - 0.1, cy - 0.05, 0.2, 0.1),
             ),
             SceneObjectConfig(
                 name="Object B",
                 color=QtGui.QColor("blue"),
-                rect=QtCore.QRectF(20, 10, 50, 30),
+                rect=QtCore.QRectF(cx + 0.05, cy + 0.02, 0.2, 0.08),
             ),
         ]
         for cfg in objects:
@@ -123,17 +126,27 @@ class PlanarSceneView(QtWidgets.QGraphicsView):
         if self._ia_item is None:
             return
         
-        # Create rectangle from bounds
+        # Create rectangle from bounds in the same physical coordinate system as the grid
         ia_rect = QtCore.QRectF(x_min, y_min, x_max - x_min, y_max - y_min)
         self._ia_item.setRect(ia_rect)
-        
-        # Update scene rect to include the new IA region
+
+        # Re-centre movable objects inside the new IA
         scene = self.scene()
         if scene is not None:
-            margin = max(abs(x_max - x_min), abs(y_max - y_min)) * 0.2
+            cx = ia_rect.center().x()
+            cy = ia_rect.center().y()
+            for item in scene.items():
+                if isinstance(item, DraggableRectItem):
+                    r = item.rect()
+                    w, h = r.width(), r.height()
+                    item.setRect(cx - w / 2, cy - h / 2, w, h)
+
+            # Update scene rect to include the new IA region with some margin
+            margin = max(abs(x_max - x_min), abs(y_max - y_min)) * 0.2 or 1e-6
             scene.setSceneRect(ia_rect.adjusted(-margin, -margin, margin, margin))
-        
-        # Force redraw
+
+        # Fit view to the IA region for clear visualization
+        self.fitInView(self._ia_item, QtCore.Qt.AspectRatioMode.KeepAspectRatio)
         self.viewport().update()
 
 
@@ -232,6 +245,8 @@ class FileLoadPanel(QtWidgets.QGroupBox):
         try:
             grid = GridIO(grid_path)
             grid.read_grid()
+            # Compute grid metrics so that search/interpolation/integration work correctly
+            grid.compute_metrics()
             flow = FlowIO(flow_path)
             flow.read_flow()
 

@@ -36,6 +36,7 @@ def main(argv: List[str] | None = None) -> None:
 
     grid = GridIO(args.grid)
     grid.read_grid()
+    grid.compute_metrics()
     flow = FlowIO(args.flow)
     flow.read_flow()
 
