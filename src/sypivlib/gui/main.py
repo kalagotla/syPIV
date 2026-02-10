@@ -37,6 +37,7 @@ from matplotlib.figure import Figure
 from matplotlib.widgets import RectangleSelector
 
 from sypivlib.function.dataio import FlowIO, GridIO
+from sypivlib.gui.sypiv_worker import SyPIVWorker
 
 
 @dataclass
@@ -248,6 +249,7 @@ class FileLoadPanel(QtWidgets.QGroupBox):
 class ParameterPanel(QtWidgets.QWidget):
     """
     Right-hand panel for adjusting parameters that affect PIV generation.
+    Uses tabs to organize parameters into logical groups.
     """
 
     parameters_changed = QtCore.pyqtSignal()
@@ -263,40 +265,222 @@ class ParameterPanel(QtWidgets.QWidget):
         self.file_panel = FileLoadPanel(self)
         layout.addWidget(self.file_panel)
 
-        layout.addWidget(QtWidgets.QLabel("PIV Parameters:", self))
+        # Use tabs for parameter organization
+        tabs = QtWidgets.QTabWidget(self)
+        layout.addWidget(tabs)
 
-        # PIV parameters
-        param_layout = QtWidgets.QFormLayout()
+        # Particle parameters tab
+        particle_tab = QtWidgets.QWidget()
+        particle_layout = QtWidgets.QFormLayout(particle_tab)
 
-        self.seeding_density_spin = QtWidgets.QDoubleSpinBox(self)
-        self.seeding_density_spin.setRange(0.0, 1e6)
-        self.seeding_density_spin.setDecimals(0)
-        self.seeding_density_spin.setValue(1e4)
-        param_layout.addRow("Seeding concentration [1/m³]:", self.seeding_density_spin)
+        self.particle_n_concentration = QtWidgets.QSpinBox()
+        self.particle_n_concentration.setRange(1, 1000000)
+        self.particle_n_concentration.setValue(500)
+        particle_layout.addRow("Particle count:", self.particle_n_concentration)
 
-        self.pulse_time_spin = QtWidgets.QDoubleSpinBox(self)
-        self.pulse_time_spin.setRange(0.0, 1.0)
-        self.pulse_time_spin.setDecimals(5)
-        self.pulse_time_spin.setSingleStep(1e-4)
-        self.pulse_time_spin.setValue(5e-3)
-        param_layout.addRow("Laser pulse time [s]:", self.pulse_time_spin)
+        self.particle_min_dia = QtWidgets.QDoubleSpinBox()
+        self.particle_min_dia.setRange(1e-9, 1e-3)
+        self.particle_min_dia.setDecimals(9)
+        self.particle_min_dia.setValue(144e-9)
+        self.particle_min_dia.setSuffix(" m")
+        particle_layout.addRow("Min diameter:", self.particle_min_dia)
 
-        self.camera_dpi_spin = QtWidgets.QSpinBox(self)
-        self.camera_dpi_spin.setRange(50, 1200)
-        self.camera_dpi_spin.setValue(300)
-        param_layout.addRow("Camera DPI:", self.camera_dpi_spin)
+        self.particle_max_dia = QtWidgets.QDoubleSpinBox()
+        self.particle_max_dia.setRange(1e-9, 1e-3)
+        self.particle_max_dia.setDecimals(9)
+        self.particle_max_dia.setValue(573e-9)
+        self.particle_max_dia.setSuffix(" m")
+        particle_layout.addRow("Max diameter:", self.particle_max_dia)
 
-        layout.addLayout(param_layout)
+        self.particle_mean_dia = QtWidgets.QDoubleSpinBox()
+        self.particle_mean_dia.setRange(1e-9, 1e-3)
+        self.particle_mean_dia.setDecimals(9)
+        self.particle_mean_dia.setValue(281e-9)
+        self.particle_mean_dia.setSuffix(" m")
+        particle_layout.addRow("Mean diameter:", self.particle_mean_dia)
 
-        # Emit a single signal whenever any parameter changes
-        for widget in (self.seeding_density_spin, self.pulse_time_spin, self.camera_dpi_spin):
-            if isinstance(widget, QtWidgets.QDoubleSpinBox):
-                widget.valueChanged.connect(self.parameters_changed.emit)  # type: ignore[arg-type]
-            else:
-                widget.valueChanged.connect(self.parameters_changed.emit)  # type: ignore[arg-type]
+        self.particle_std_dia = QtWidgets.QDoubleSpinBox()
+        self.particle_std_dia.setRange(0, 1e-3)
+        self.particle_std_dia.setDecimals(9)
+        self.particle_std_dia.setValue(97e-9)
+        self.particle_std_dia.setSuffix(" m")
+        particle_layout.addRow("Std diameter:", self.particle_std_dia)
+
+        self.particle_density = QtWidgets.QDoubleSpinBox()
+        self.particle_density.setRange(1, 10000)
+        self.particle_density.setValue(810)
+        self.particle_density.setSuffix(" kg/m³")
+        particle_layout.addRow("Particle density:", self.particle_density)
+
+        self.particle_in_plane = QtWidgets.QDoubleSpinBox()
+        self.particle_in_plane.setRange(0, 100)
+        self.particle_in_plane.setDecimals(1)
+        self.particle_in_plane.setValue(90.0)
+        self.particle_in_plane.setSuffix(" %")
+        particle_layout.addRow("In-plane percentage:", self.particle_in_plane)
+
+        tabs.addTab(particle_tab, "Particles")
+
+        # Laser parameters tab
+        laser_tab = QtWidgets.QWidget()
+        laser_layout = QtWidgets.QFormLayout(laser_tab)
+
+        self.laser_position = QtWidgets.QDoubleSpinBox()
+        self.laser_position.setRange(-10, 10)
+        self.laser_position.setDecimals(6)
+        self.laser_position.setValue(0.0009)
+        self.laser_position.setSuffix(" m")
+        laser_layout.addRow("Laser position (z):", self.laser_position)
+
+        self.laser_thickness = QtWidgets.QDoubleSpinBox()
+        self.laser_thickness.setRange(1e-6, 1e-2)
+        self.laser_thickness.setDecimals(6)
+        self.laser_thickness.setValue(0.0001)
+        self.laser_thickness.setSuffix(" m")
+        laser_layout.addRow("Laser thickness:", self.laser_thickness)
+
+        self.laser_pulse_time = QtWidgets.QDoubleSpinBox()
+        self.laser_pulse_time.setRange(1e-9, 1.0)
+        self.laser_pulse_time.setDecimals(9)
+        self.laser_pulse_time.setValue(1e-7)
+        self.laser_pulse_time.setSuffix(" s")
+        laser_layout.addRow("Pulse time:", self.laser_pulse_time)
+
+        tabs.addTab(laser_tab, "Laser")
+
+        # CCD parameters tab
+        ccd_tab = QtWidgets.QWidget()
+        ccd_layout = QtWidgets.QFormLayout(ccd_tab)
+
+        self.ccd_xres = QtWidgets.QSpinBox()
+        self.ccd_xres.setRange(16, 8192)
+        self.ccd_xres.setValue(512)
+        ccd_layout.addRow("X resolution (px):", self.ccd_xres)
+
+        self.ccd_yres = QtWidgets.QSpinBox()
+        self.ccd_yres.setRange(16, 8192)
+        self.ccd_yres.setValue(512)
+        ccd_layout.addRow("Y resolution (px):", self.ccd_yres)
+
+        self.ccd_dpi = QtWidgets.QSpinBox()
+        self.ccd_dpi.setRange(50, 1200)
+        self.ccd_dpi.setValue(96)
+        ccd_layout.addRow("DPI:", self.ccd_dpi)
+
+        self.ccd_d_ccd = QtWidgets.QDoubleSpinBox()
+        self.ccd_d_ccd.setRange(1e-4, 1.0)
+        self.ccd_d_ccd.setDecimals(6)
+        self.ccd_d_ccd.setValue(0.0135)  # Will be auto-calculated
+        self.ccd_d_ccd.setSuffix(" m")
+        ccd_layout.addRow("CCD distance:", self.ccd_d_ccd)
+
+        self.ccd_d_ia = QtWidgets.QDoubleSpinBox()
+        self.ccd_d_ia.setRange(1e-4, 1.0)
+        self.ccd_d_ia.setDecimals(6)
+        self.ccd_d_ia.setValue(0.0009)
+        self.ccd_d_ia.setSuffix(" m")
+        ccd_layout.addRow("IA distance:", self.ccd_d_ia)
+
+        tabs.addTab(ccd_tab, "CCD")
+
+        # Intensity parameters tab
+        intensity_tab = QtWidgets.QWidget()
+        intensity_layout = QtWidgets.QFormLayout(intensity_tab)
+
+        self.intensity_sx = QtWidgets.QDoubleSpinBox()
+        self.intensity_sx.setRange(0.1, 10.0)
+        self.intensity_sx.setDecimals(2)
+        self.intensity_sx.setValue(2.0)
+        intensity_layout.addRow("Sx (pixel spread x):", self.intensity_sx)
+
+        self.intensity_sy = QtWidgets.QDoubleSpinBox()
+        self.intensity_sy.setRange(0.1, 10.0)
+        self.intensity_sy.setDecimals(2)
+        self.intensity_sy.setValue(2.0)
+        intensity_layout.addRow("Sy (pixel spread y):", self.intensity_sy)
+
+        self.intensity_frx = QtWidgets.QDoubleSpinBox()
+        self.intensity_frx.setRange(0.1, 10.0)
+        self.intensity_frx.setDecimals(2)
+        self.intensity_frx.setValue(1.0)
+        intensity_layout.addRow("Frx (frame size x):", self.intensity_frx)
+
+        self.intensity_fry = QtWidgets.QDoubleSpinBox()
+        self.intensity_fry.setRange(0.1, 10.0)
+        self.intensity_fry.setDecimals(2)
+        self.intensity_fry.setValue(1.0)
+        intensity_layout.addRow("Fry (frame size y):", self.intensity_fry)
+
+        self.intensity_s = QtWidgets.QDoubleSpinBox()
+        self.intensity_s.setRange(1, 10000)
+        self.intensity_s.setDecimals(0)
+        self.intensity_s.setValue(2)
+        intensity_layout.addRow("S (shape factor):", self.intensity_s)
+
+        self.intensity_q = QtWidgets.QDoubleSpinBox()
+        self.intensity_q.setRange(0.1, 10.0)
+        self.intensity_q.setDecimals(2)
+        self.intensity_q.setValue(1.0)
+        intensity_layout.addRow("Q (efficiency):", self.intensity_q)
+
+        tabs.addTab(intensity_tab, "Intensity")
 
         layout.addItem(QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Policy.Expanding,
                                              QtWidgets.QSizePolicy.Policy.Expanding))
+
+        # Connect all parameter changes
+        all_widgets = [
+            self.particle_n_concentration, self.particle_min_dia, self.particle_max_dia,
+            self.particle_mean_dia, self.particle_std_dia, self.particle_density, self.particle_in_plane,
+            self.laser_position, self.laser_thickness, self.laser_pulse_time,
+            self.ccd_xres, self.ccd_yres, self.ccd_dpi, self.ccd_d_ccd, self.ccd_d_ia,
+            self.intensity_sx, self.intensity_sy, self.intensity_frx, self.intensity_fry,
+            self.intensity_s, self.intensity_q,
+        ]
+        for widget in all_widgets:
+            widget.valueChanged.connect(self.parameters_changed.emit)  # type: ignore[arg-type]
+
+    def get_particle_params(self) -> dict:
+        """Get particle parameters as a dictionary."""
+        return {
+            "n_concentration": self.particle_n_concentration.value(),
+            "min_dia": self.particle_min_dia.value(),
+            "max_dia": self.particle_max_dia.value(),
+            "mean_dia": self.particle_mean_dia.value(),
+            "std_dia": self.particle_std_dia.value(),
+            "density": self.particle_density.value(),
+            "in_plane": self.particle_in_plane.value(),
+            "distribution": "gaussian",
+        }
+
+    def get_laser_params(self) -> dict:
+        """Get laser parameters as a dictionary."""
+        return {
+            "position": self.laser_position.value(),
+            "thickness": self.laser_thickness.value(),
+            "pulse_time": self.laser_pulse_time.value(),
+        }
+
+    def get_ccd_params(self) -> dict:
+        """Get CCD parameters as a dictionary."""
+        return {
+            "xres": self.ccd_xres.value(),
+            "yres": self.ccd_yres.value(),
+            "dpi": self.ccd_dpi.value(),
+            "d_ccd": self.ccd_d_ccd.value(),
+            "d_ia": self.ccd_d_ia.value(),
+        }
+
+    def get_intensity_params(self) -> dict:
+        """Get intensity parameters as a dictionary."""
+        return {
+            "sx": self.intensity_sx.value(),
+            "sy": self.intensity_sy.value(),
+            "frx": self.intensity_frx.value(),
+            "fry": self.intensity_fry.value(),
+            "s": int(self.intensity_s.value()),
+            "q": self.intensity_q.value(),
+        }
 
 
 class PreviewPanel(QtWidgets.QWidget):
@@ -429,6 +613,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._grid: Optional[GridIO] = None
         self._flow: Optional[FlowIO] = None
         self._current_variable: str = "rho"
+        self._ia_bounds: Optional[list[float]] = None  # [x_min, x_max, y_min, y_max]
+        self._worker: Optional[SyPIVWorker] = None
+        self._snapshots: dict[int, dict[str, np.ndarray]] = {}
         self._build_ui()
         self._connect_signals()
 
@@ -476,6 +663,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.run_action = toolbar.addAction("Generate PIV")
         self.run_action.setToolTip("Run a PIV image generation using current configuration.")
 
+        toolbar.addSeparator()
+
+        self.save_current_action = toolbar.addAction("Save Current Pair")
+        self.save_current_action.setToolTip("Save the most recent snapshot pair to disk.")
+
+        self.save_all_action = toolbar.addAction("Save All Pairs")
+        self.save_all_action.setToolTip("Save all generated snapshot pairs to disk.")
+
     def _connect_signals(self) -> None:
         self.param_panel.file_panel.files_loaded.connect(self.on_files_loaded)
         self.variable_combo.currentTextChanged.connect(self.on_variable_changed)
@@ -483,6 +678,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.param_panel.parameters_changed.connect(self.on_parameters_changed)
         self.preview_panel.region_selected.connect(self.on_region_selected)
         self.select_region_action.toggled.connect(self.on_region_selection_toggled)
+        self.save_current_action.triggered.connect(self.on_save_current_pair)
+        self.save_all_action.triggered.connect(self.on_save_all_pairs)
 
     # -----------------------------
     # Slots / event handlers
@@ -503,14 +700,56 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def on_run_clicked(self) -> None:
-        """Trigger a PIV generation."""
-        msg_box = QtWidgets.QMessageBox(self)
-        msg_box.setWindowTitle("Generate PIV")
-        msg_box.setText(
-            "Generate PIV clicked.\n"
-            "This will be wired to the syPIV image_gen module in a future update.",
+        """Trigger a PIV generation using the syPIV pipeline."""
+        if self._grid is None or self._flow is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing data",
+                "Please load Plot3D grid (.x) and flow (.q) files before generating PIV images.",
+            )
+            return
+
+        if self._ia_bounds is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Missing IA region",
+                "Please select an interrogation region on the contour plot before generating PIV images.",
+            )
+            return
+
+        if self._worker is not None and self._worker.isRunning():
+            QtWidgets.QMessageBox.information(
+                self,
+                "Processing in progress",
+                "A syPIV computation is already running. Please wait for it to finish.",
+            )
+            return
+
+        particle_params = self.param_panel.get_particle_params()
+        laser_params = self.param_panel.get_laser_params()
+        ccd_params = self.param_panel.get_ccd_params()
+        intensity_params = self.param_panel.get_intensity_params()
+
+        self._snapshots.clear()
+
+        self._worker = SyPIVWorker(
+            grid=self._grid,
+            flow=self._flow,
+            ia_bounds=self._ia_bounds,
+            particle_params=particle_params,
+            laser_params=laser_params,
+            ccd_params=ccd_params,
+            intensity_params=intensity_params,
+            num_snapshots=3,
+            parent=self,
         )
-        msg_box.exec()
+        self._worker.progress.connect(self.on_worker_progress)
+        self._worker.snapshot_complete.connect(self.on_snapshot_complete)
+        self._worker.finished.connect(self.on_worker_finished)
+        self._worker.error.connect(self.on_worker_error)
+
+        self.statusBar().showMessage("Starting syPIV computation...")
+        self._worker.start()
 
     @QtCore.pyqtSlot()
     def on_parameters_changed(self) -> None:
@@ -520,6 +759,7 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(float, float, float, float)
     def on_region_selected(self, x_min: float, x_max: float, y_min: float, y_max: float) -> None:
         """Handle interrogation region selection from the contour plot."""
+        self._ia_bounds = [x_min, x_max, y_min, y_max]
         self.scene_view.update_ia_region(x_min, x_max, y_min, y_max)
         self.statusBar().showMessage(
             f"IA region selected: x=[{x_min:.3f}, {x_max:.3f}], y=[{y_min:.3f}, {y_max:.3f}]",
@@ -530,6 +770,105 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_region_selection_toggled(self, enabled: bool) -> None:
         """Enable or disable region selection on the contour plot."""
         self.preview_panel.set_region_selection_enabled(enabled)
+
+    @QtCore.pyqtSlot(str)
+    def on_worker_progress(self, message: str) -> None:
+        """Update status bar with worker progress."""
+        self.statusBar().showMessage(message, 5000)
+
+    @QtCore.pyqtSlot(int, object, object)
+    def on_snapshot_complete(self, snap_num: int, img1: object, img2: object) -> None:
+        """
+        Handle completion of a snapshot pair from the worker.
+        Store intensity arrays for later saving and show the latest pair in the preview.
+        """
+        try:
+            # Store intensity arrays
+            arr1 = img1.intensity.values
+            arr2 = img2.intensity.values
+            self._snapshots[snap_num] = {"image1": arr1, "image2": arr2}
+
+            # Show the first image of the latest pair in the preview panel as a quick look
+            xres = arr1.shape[1]
+            yres = arr1.shape[0]
+            x = np.linspace(-xres / 2, xres / 2, xres)
+            y = np.linspace(-yres / 2, yres / 2, yres)
+            X, Y = np.meshgrid(x, y)
+            self.preview_panel.show_contour(X, Y, arr1, f"PIV snapshot {snap_num} (image 1)")
+
+            self.statusBar().showMessage(f"Snapshot pair {snap_num} completed", 5000)
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Snapshot handling error",
+                f"Failed to handle snapshot pair {snap_num}:\n{e}",
+            )
+
+    @QtCore.pyqtSlot(bool, str)
+    def on_worker_finished(self, success: bool, message: str) -> None:
+        """Handle worker completion."""
+        self.statusBar().showMessage(message, 8000)
+        if not success:
+            QtWidgets.QMessageBox.warning(self, "syPIV computation", message)
+
+    @QtCore.pyqtSlot(str)
+    def on_worker_error(self, message: str) -> None:
+        """Show detailed error from the worker."""
+        QtWidgets.QMessageBox.critical(self, "syPIV error", message)
+
+    @QtCore.pyqtSlot()
+    def on_save_current_pair(self) -> None:
+        """Save the most recent snapshot pair."""
+        if not self._snapshots:
+            QtWidgets.QMessageBox.information(
+                self,
+                "No snapshots",
+                "No snapshot pairs have been generated yet.",
+            )
+            return
+
+        latest_snap = max(self._snapshots.keys())
+        arrs = self._snapshots[latest_snap]
+
+        directory = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Select directory to save current pair",
+            "",
+        )
+        if not directory:
+            return
+
+        base = os.path.join(directory, f"pair{latest_snap}")
+        np.save(base + "_1.npy", arrs["image1"])
+        np.save(base + "_2.npy", arrs["image2"])
+
+        self.statusBar().showMessage(f"Saved current pair {latest_snap} as .npy files in {directory}", 8000)
+
+    @QtCore.pyqtSlot()
+    def on_save_all_pairs(self) -> None:
+        """Save all generated snapshot pairs."""
+        if not self._snapshots:
+            QtWidgets.QMessageBox.information(
+                self,
+                "No snapshots",
+                "No snapshot pairs have been generated yet.",
+            )
+            return
+
+        directory = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "Select directory to save all pairs",
+            "",
+        )
+        if not directory:
+            return
+
+        for snap_num, arrs in self._snapshots.items():
+            base = os.path.join(directory, f"pair{snap_num}")
+            np.save(base + "_1.npy", arrs["image1"])
+            np.save(base + "_2.npy", arrs["image2"])
+
+        self.statusBar().showMessage(f"Saved {len(self._snapshots)} snapshot pairs as .npy files in {directory}", 8000)
 
     # -----------------------------
     # Internal helpers
